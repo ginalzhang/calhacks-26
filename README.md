@@ -35,11 +35,22 @@ The local grammar, the typed-command box, drawing, shape cleanup, undo and expor
 
 **Hardware tips**
 
-- **Camera:** a camera looking down at the desk tracks a resting hand best. The team demos with macOS **Desk View** (an iPhone on top of the MacBook display via Continuity Camera); pick it in Chrome's site settings › Camera (an in-app camera picker is not built yet). Any external webcam or phone-as-webcam on a stand looking down works the same way. Second choice: push the laptop back and tilt the lid about 30° down. (Head mode is listed on the setup screen but not available yet.)
+- **Camera:** a camera looking down at the desk tracks a resting hand best. The team demos with macOS **Desk View** (an iPhone on top of the MacBook display via Continuity Camera); pick it in Chrome's site settings › Camera (an in-app camera picker is not built yet). Any external webcam or phone-as-webcam on a stand looking down works the same way. Second choice: push the laptop back and tilt the lid about 30° down. Third: **Head mode** (below).
 - **Rest your wrist** on the desk, a book or a rolled towel. Let your other fingers curl loosely; you don't need to point.
 - **Light:** a clip lamp aimed at the desk. Dim light lowers detection confidence (more so for darker skin tones); the app warns when the frame is too dark.
 - **Microphone:** a headset mic. Laptop mics in a loud hall miss commands.
 - **Keys and switches:** any USB/Bluetooth switch that sends Space or Enter works as a one-switch pen toggle. If pressing two keys together is hard, turn on your operating system's **Sticky Keys** (macOS: Accessibility › Keyboard; Windows: Settings › Accessibility › Keyboard). Steady itself never needs a key combination.
+
+**Head mode and face tap** (for when a hand can't be used or isn't visible):
+
+- **Head mode** (tile under Setup, or say or type "head mode") moves the cursor with your nose tip instead of your hand. It has its own gain (default 6×, slider 3–10×) and its own setup: a 3 s "look at the middle of the screen and hold your head still" that sets the neutral position. "Recenter" re-measures only the neutral point. Hand mode keeps its own gain and calibration, so you can switch back and forth.
+- **Face tap** ("Face tap" tile or phrase) toggles the pen with a mouth-open *tap*: open and close, never hold. It starts with a short "open your mouth comfortably twice" check that sets your own thresholds. Raising your eyebrows works as an alternative (Settings). Face tap only toggles the pen. It is ignored while the mic is open and for 500 ms afterwards, and it is never on when the page loads.
+- **Break reminders:** after 10 min of tracking in Head mode, or 15 min in Hand mode, a non-blocking status line suggests a break. Your next action or pen-down dismisses it. Turn it off in Settings.
+- Head mode and face tap have been **tested only on synthetic replays** (landmark and blendshape fixtures), never on a real camera.
+
+**Zoom and move:** "zoom in", "zoom out", "fit page", "move up/down/left/right" (tiles under View) change only the view. They are not undo steps, and exports always cover the whole page at 100 %.
+
+**Offline-capable model loading:** the MediaPipe hand and face models and the wasm runtime are served from `public/mediapipe/` (37 MB, included in the repo), so tracking starts without internet access. If the local files can't load, the app falls back to the jsDelivr / Google storage CDN automatically. Voice (Cartesia or Web Speech) and Claude still need the network; the typed box and the local grammar don't.
 
 **Without a camera** (demos, tests): `http://localhost:3000/?source=replay&fixture=word-tremor&skipIntro=1` replays a synthesised hand. Fixtures are described in `public/fixtures/README.md`; `?demo=1` opens the Demo panel.
 
@@ -149,7 +160,7 @@ Camera frames never leave the browser. Microphone audio goes to Cartesia (or Goo
 Run on 2026-10-24 against the current tree (no camera, no keys, no network needed):
 
 ```bash
-npm test                          # Vitest: pipeline, grammar, action table, API schemas, Desktop-mode mapping
+npm test                          # Vitest: pipeline, grammar, action table, API schemas, Desktop-mode mapping, view/face-tap/breaks
 npx playwright install chromium   # once
 npm run test:e2e                  # Playwright: ReplaySource fixtures drive the real app in Chromium
 npm run test:helper               # Python unittest for the Desktop-mode helper (fake mouse controller)
@@ -157,24 +168,24 @@ npm run test:helper               # Python unittest for the Desktop-mode helper 
 
 `npm test` (Vitest):
 ```
- Test Files  23 passed (23)
-      Tests  227 passed (227)
+ Test Files  26 passed (26)
+      Tests  246 passed (246)
 ```
 `npm run test:e2e` (Playwright, Chromium):
 ```
   1 skipped
-  22 passed (48.8s)
+  22 passed (48.5s)
 ```
 `npm run test:helper` (Python unittest):
 ```
-Ran 37 tests in 4.042s
+Ran 37 tests in 3.939s
 
 OK
 ```
 
 - **Playwright** (`e2e/`, fixtures in `public/fixtures/`): calibration completes; hold-still pen-down and pen-up draw exactly one stroke; a hand resting for 10 s leaves no ink; the shaky word "hi" is one stroke; typed "make it a circle" converts the last stroke; Save PNG and typed "export picture" download a real PNG; tracking loss mid-stroke lifts the pen and keeps it up; the too-dark warning; the Demo panel metrics; Backspace / Y / Z undo-redo; Space toggles the pen; keys type normally inside the command box; Esc and Enter cancel a destructive dialog and typed "yes" confirms; tile size, names, aria-pressed and focus ring; canvas, live region and slider labels; Steadiness 0 vs 100 draws visibly different strokes; "steadier" / "looser".
 - **Skipped:** the fake-webcam run (`e2e/fake-camera.spec.ts`) needs a real 5 s recording at `e2e/assets/hand.y4m`, which is not in the repo yet (see `NEEDS-HUMAN.md`).
-- **Not covered by automated tests:** a real webcam and MediaPipe, a real microphone, the live Cartesia and Anthropic APIs (keys were absent; mocks were used), a screen reader, and painting in real Krita.
+- **Not covered by automated tests:** a real webcam and MediaPipe (including Head mode and face tap on a real face), a real microphone, the live Cartesia and Anthropic APIs (keys were absent; mocks were used), a screen reader, and painting in real Krita.
 
 ## From hackathon to Monday
 
@@ -192,7 +203,7 @@ OK
 - Dysarthric and accented speech: accuracy not measured.
 - English only.
 - Multiple tabs open on Steady compete for the camera.
-- Neck fatigue in Head mode (Head mode itself is not available in this build).
+- Neck fatigue in Head mode; break reminders (10 min in Head mode, 15 min in Hand mode) are on by default. Head mode and face tap are tested only on synthetic replays, not on a real camera.
 - Two hands in the frame: only one is tracked, and it may switch.
 - **Desktop mode is macOS only** (no Windows or Linux helper).
 - **No pressure or tilt in other apps:** Krita and other apps get a plain mouse drag, so brush pressure dynamics do nothing.

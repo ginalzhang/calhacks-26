@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { runtime } from "@/state/runtime";
-import { setState, setStatus, useStore, type Posture } from "@/state/store";
+import { setState, useStore, type Posture } from "@/state/store";
 import { persistSetup } from "@/state/runtime";
 import { TileButton } from "./Tile";
 
@@ -20,7 +20,7 @@ const POSTURES: { id: Posture; title: string; detail: string }[] = [
   {
     id: "head",
     title: "Head mode",
-    detail: "Move your head instead of your hand. Not available in this build yet; use one of the first two for now.",
+    detail: "Move your head instead of your hand. Setup is one 3-second step: look at the middle of the screen and hold still.",
   },
 ];
 
@@ -85,7 +85,6 @@ export default function Calibration() {
                   onChange={() => {
                     setState({ posture: p.id });
                     persistSetup();
-                    if (p.id === "head") setStatus("Head mode isn't available yet. Choose the desk camera or the tilted laptop.");
                   }}
                 />
                 <span>
@@ -106,8 +105,12 @@ export default function Calibration() {
               label="Start"
               className="tile-primary"
               keepFocus
-              disabled={posture === "head"}
-              onActivate={() => runtime.beginCalibration("full")}
+              onActivate={async () => {
+                // The Head posture switches tracking to the face first; setup then runs the single neutral step.
+                if (posture === "head" && !head && !(await runtime.setHeadMode(true))) return;
+                if (posture !== "head" && head && !(await runtime.setHeadMode(false))) return;
+                runtime.beginCalibration("full");
+              }}
             />
             <TileButton tileId="calib.cancel" label="Not now" keyHint="Esc" onActivate={() => runtime.cancelCalibration()} />
           </div>
