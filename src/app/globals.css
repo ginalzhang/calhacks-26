@@ -1,26 +1,1027 @@
 @import "tailwindcss";
 
+/*
+ * Steady design tokens. All text >= 18 px, text contrast >= 4.5:1, UI contrast >= 3:1,
+ * visible 3:1 focus ring, usable at 200 % zoom (layout stacks below 1000 CSS px).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f3f1ec;
+  --surface: #ffffff;
+  --text: #161616;
+  --muted: #3d3d3d; /* 10.4:1 on white */
+  --border: #4d4d4d; /* 8.4:1 on white (UI >= 3:1) */
+  --primary: #0b4fb3; /* 7.3:1 on white */
+  --primary-dark: #0b3d91;
+  --danger: #a3221b; /* 7.4:1 on white */
+  --warn-bg: #fff4e5;
+  --warn: #8a4100; /* 7:1 on --warn-bg */
+  --ok: #146c33;
+  --focus: #111111;
+  --rest: #d9d4c8;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-size: 18px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin: 0 0 0.5rem;
+}
+h1 {
+  font-size: 2rem;
+}
+h2 {
+  font-size: 1.35rem;
+}
+h3 {
+  font-size: 1.15rem;
+  margin-top: 1rem;
+}
+p {
+  margin: 0 0 0.5rem;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 4px solid var(--focus);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px #ffffff;
+}
+
+.loading-screen {
+  padding: 2rem;
+}
+
+/* ------------------------------------------------------------------ layout */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-weight: 800;
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  gap: 1rem;
+  padding: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stage-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .stage-bottom.with-demo {
+    grid-template-columns: minmax(260px, 1fr) minmax(0, 1.6fr);
+  }
+}
+
+.toolbar .slider {
+  margin-top: 0.75rem;
+}
+
+.stage {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stage-inner {
+  position: relative;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ canvas */
+.canvas-frame {
+  /* The wide margin is a rest zone: dwell never toggles ink here. */
+  padding: 40px;
+  background: repeating-linear-gradient(45deg, var(--rest), var(--rest) 12px, #e3dfd5 12px, #e3dfd5 24px);
+  border-radius: 14px;
+  border: 6px solid transparent;
+}
+
+.canvas-frame.is-drawing {
+  border-color: var(--ink, var(--primary));
+}
+
+.drawing-canvas {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 290px);
+  min-height: 360px;
+  background: #fbfaf6;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  touch-action: none;
+}
+
+.cursor-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 2000;
+}
+
+/* ------------------------------------------------------------------ tiles */
+.tile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  /* Never a scroll container (dwell and switch users cannot scroll). */
+  overflow: visible;
+}
+
+.tile {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 92px;
+  min-height: 68px;
+  padding: 6px 10px 10px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: center;
+}
+
+.tile:hover {
+  background: #eef3fb;
+}
+
+.tile[aria-pressed="true"] {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+  color: #ffffff;
+}
+
+.tile:disabled {
+  color: #595959;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.tile-primary,
+.tile-primary:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.tile-destructive {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.tile-label {
+  line-height: 1.15;
+}
+
+.tile-key {
+  font-size: 1rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.tile-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #111;
+}
+
+.tile-category {
+  background: #f5f2ea;
+}
+
+/* Dwell progress fill (also shown as a ring around the cursor). */
+.tile-dwell {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 8px;
+  width: calc(var(--dwell, 0) * 100%);
+  background: var(--primary);
+  pointer-events: none;
+}
+.tile[aria-pressed="true"] .tile-dwell,
+.tile-primary .tile-dwell {
+  background: #ffd23f;
+}
+
+[data-dwell-hover] {
+  outline: 4px dashed var(--primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-dwell {
+    /* Stepped indicator: quarters only. */
+    /* Stepped fill set in JS (runtime.setTileState quantises --dwell). */
+    transition: none;
+  }
+}
+
+.toolbar {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.toolbar-title {
+  margin-bottom: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ status bar */
+.statusbar {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.status-line {
+  flex: 1 1 300px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 48px;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.status-alert {
+  background: var(--warn-bg);
+  border-left: 6px solid var(--warn);
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.status-text {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.status-text:empty {
+  display: none;
+}
+
+.pen-badge {
+  flex: none;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+}
+
+.pen-drawing {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #ffffff;
+}
+
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  background: #f7f7f7;
+}
+
+.chip-warn {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.undo-affordance {
+  position: relative;
+  overflow: hidden;
+  min-height: 64px;
+  min-width: 140px;
+  padding: 6px 14px 12px;
+  font: inherit;
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.undo-affordance:disabled {
+  color: #595959;
+  border-style: dashed;
+  cursor: default;
+}
+
+.banner {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.75rem 1rem 0;
+  padding: 0.75rem 1rem;
+  background: var(--warn-bg);
+  border: 2px solid var(--warn);
+  border-radius: 10px;
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.link-button {
+  font: inherit;
+  background: none;
+  border: none;
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 8px 4px;
+  min-height: 44px;
+}
+
+.warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ preview */
+.preview {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-direction: column;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.preview-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #202020;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.preview-collapsed {
+  flex-direction: row;
+}
+
+.preview-collapsed .preview-box {
+  width: 120px;
+  flex: none;
+}
+
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirrored like a mirror; landmark x is flipped to match */
+}
+
+.preview-replay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.preview-collapsed .preview-replay {
+  font-size: 1rem;
+}
+
+.preview-error {
+  background: #5a1410;
+}
+
+.preview-meta p {
+  margin: 0 0 4px;
+}
+
+.track-dot,
+.dot-inline {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px #111;
+}
+
+.track-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.dot-green {
+  background: #178a3c;
+}
+.dot-amber {
+  background: #e09200;
+}
+.dot-red {
+  background: #c62828;
+}
+
+/* ------------------------------------------------------------------ sliders + fields */
+.slider {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.slider-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+}
+
+.slider input[type="range"] {
+  width: 100%;
+  height: 44px;
+  accent-color: var(--primary);
+}
+
+.slider-hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0.75rem 0;
+}
+
+select,
+input[type="text"],
+textarea {
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 10px 12px;
+  min-height: 52px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+}
+
+.checks {
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 0.75rem 0;
+}
+
+.checks label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+}
+
+.checks input,
+.posture input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
+}
+
+/* ------------------------------------------------------------------ typed box */
+.typed {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.typed label {
+  font-weight: 700;
+}
+
+.typed-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 4px;
+}
+
+.typed-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.typed-hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.tile-run {
+  min-height: 64px;
+}
+
+/* ------------------------------------------------------------------ first run */
+.firstrun {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  overflow: auto;
+  background: var(--bg);
+  padding: 2rem clamp(1rem, 4vw, 4rem);
+}
+
+.lede {
+  font-size: 1.25rem;
+  max-width: 50ch;
+}
+
+.firstrun-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 1.25rem 0 1.5rem;
+}
+
+.firstrun-actions .tile {
+  min-width: 200px;
+  min-height: 80px;
+  font-size: 1.15rem;
+}
+
+.firstrun-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.firstrun-cols section {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.howto li {
+  margin-bottom: 0.5rem;
+}
+
+.keymap {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.keymap caption {
+  text-align: left;
+  color: var(--muted);
+  padding-bottom: 4px;
+}
+
+.keymap th,
+.keymap td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #8a8a8a;
+}
+
+kbd {
+  font: inherit;
+  font-weight: 700;
+  border: 2px solid var(--border);
+  border-bottom-width: 4px;
+  border-radius: 6px;
+  padding: 0 6px;
+  background: #fafafa;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ calibration */
+.calibration {
+  position: absolute;
+  inset: 40px;
+  z-index: 20;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.97);
+  border: 3px solid var(--primary);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.calib-instruction {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.coach {
+  max-width: 60ch;
+}
+
+.posture {
+  border: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.posture legend {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.posture-option {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  background: #ffffff;
+}
+
+.posture-option.is-selected {
+  border-color: var(--primary);
+  border-width: 4px;
+  padding: 8px 10px;
+}
+
+.posture-detail {
+  display: block;
+  color: var(--muted);
+}
+
+.wrist-diagram {
+  display: block;
+  width: min(100%, 420px);
+  height: auto;
+  color: var(--text);
+  margin: 0.5rem 0;
+}
+
+.calib-progress {
+  width: 100%;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  margin: 0.5rem 0;
+}
+
+.calib-progress-fill {
+  height: 100%;
+  background: var(--primary);
+}
+
+.calib-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 0.75rem;
+}
+
+/* ------------------------------------------------------------------ panels + overlays */
+.panel {
+  position: absolute;
+  inset: 24px;
+  z-index: 30;
+  overflow: auto;
+  background: var(--surface);
+  border: 3px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.panel-head h2:focus {
+  outline: none;
+}
+
+.panel .slider {
+  margin-bottom: 0.75rem;
+}
+
+.panel .tile-grid {
+  margin: 0.75rem 0;
+}
+
+.phrase-list {
+  columns: 2 280px;
+}
+
+.profiles {
+  list-style: none;
+  padding: 0;
+}
+
+.profiles li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.context-panel,
+.demo-panel {
+  background: var(--surface);
+  border: 3px solid var(--primary);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.demo-panel {
+  border-color: #6a2fb0;
+}
+
+.transcript {
+  min-height: 3.5em;
+  padding: 8px 10px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  font-size: 1.15rem;
+}
+
+.dictation-edit {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0 0.5rem;
+}
+
+.level-meter {
+  height: 16px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.level-fill {
+  height: 100%;
+  background: var(--ok);
+}
+
+.quote {
+  margin: 0 0 0.75rem;
+  padding: 10px 12px;
+  border-left: 6px solid #6a2fb0;
+  background: #f6f1fc;
+}
+
+.quote blockquote {
+  margin: 0;
+  font-size: 1.15rem;
+  font-style: italic;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  column-gap: 1.25rem;
+  gap: 4px;
+  margin: 0.75rem 0;
+}
+
+.metrics div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #8a8a8a;
+  padding: 2px 0;
+}
+
+.metrics dt {
+  color: var(--muted);
+}
+
+.metrics dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--surface);
+  border: 3px solid var(--danger);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  max-width: 680px;
+  width: 100%;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 1rem 0;
+}
+
+.modal-actions .tile {
+  min-width: 150px;
+  min-height: 80px;
+}
+
+/* ------------------------------------------------------------------ print / PDF: only the canvas */
+@media print {
+  .topbar,
+  .side,
+  .typed,
+  .banner,
+  .cursor-overlay,
+  .calibration,
+  .panel,
+  .modal-backdrop,
+  .firstrun {
+    display: none !important;
+  }
+  body {
+    background: #ffffff;
+  }
+  .workspace {
+    display: block;
+    padding: 0;
+  }
+  .canvas-frame {
+    padding: 0;
+    border: none;
+    background: none;
+  }
+  .drawing-canvas {
+    width: 100%;
+    height: auto;
+    border: none;
+  }
+}
+
+/* Programmatic focus (dialog open → Cancel) must show the ring too, not only :focus-visible. */
+.modal .tile:focus,
+.context-panel .tile:focus {
+  outline: 4px solid var(--focus);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px #ffffff;
+}
+
+/* Compact Demo panel: stat boxes. */
+.demo-panel .tile-grid {
+  margin-bottom: 0.5rem;
+}
+.demo-panel .metrics {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 6px;
+}
+.demo-panel .metrics div {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0;
+  border: 2px solid #8a8a8a;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.demo-panel .metrics dd {
+  text-align: left;
+}
+.demo-panel .quote {
+  padding: 6px 10px;
+}
+.demo-panel .quote blockquote {
+  font-size: 1rem;
+}
+
+/* Wide screens with the Demo panel open: canvas | demo | controls. */
+@media (min-width: 1500px) {
+  .workspace.with-demo {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px) minmax(320px, 440px);
+  }
+}
+
+.posture {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+.posture legend {
+  grid-column: 1 / -1;
+}
+.posture-option {
+  margin-bottom: 0;
+}
+.calibration {
+  inset: 0;
+}
+
+/* P2b Desktop mode: narrow control window beside the drawing app. */
+.app-desktop {
+  max-width: 440px;
+  padding: 0.75rem;
+  gap: 0.75rem;
 }
