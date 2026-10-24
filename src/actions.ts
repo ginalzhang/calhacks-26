@@ -157,6 +157,10 @@ export const ACTION_IDS = [
   "tremor.toggle",
   "ghost.toggle",
   "judge.next",
+  // desktop mode (§6a)
+  "desktop.toggle",
+  "desktop.area",
+  "desktop.dwellclick",
 ] as const;
 
 export type ActionId = (typeof ACTION_IDS)[number];
@@ -267,6 +271,11 @@ export const ACTIONS: readonly ActionDef[] = [
   a({ id: "tremor.toggle", label: "Simulate tremor", phrases: ["simulate tremor"], typed: "simulate tremor", key: null, category: "demo", toggle: true, phase: 1 }),
   a({ id: "ghost.toggle", label: "Ghost view", phrases: ["ghost view"], typed: "ghost view", key: null, category: "demo", toggle: true, phase: 1 }),
   a({ id: "judge.next", label: "Next judge", phrases: ["next judge"], typed: "next judge", key: null, category: "demo", destructive: true, context: "demo", phase: 1 }),
+
+  // ---- desktop mode (§6a; owned by agent E's src/desktop/**) ----
+  a({ id: "desktop.toggle", label: "Desktop mode", phrases: ["desktop mode"], typed: "desktop mode", key: null, category: "setup", toggle: true, phase: 2 }),
+  a({ id: "desktop.area", label: "Set drawing area", phrases: ["set drawing area"], typed: "set drawing area", key: null, category: "setup", phase: 2 }),
+  a({ id: "desktop.dwellclick", label: "Dwell click", phrases: ["dwell click"], typed: "dwell click", key: null, category: "setup", toggle: true, phase: 2 }),
 ];
 
 export const ACTION_BY_ID: Record<ActionId, ActionDef> = Object.fromEntries(ACTIONS.map((d) => [d.id, d])) as Record<

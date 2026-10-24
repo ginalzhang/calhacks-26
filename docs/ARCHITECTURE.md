@@ -32,6 +32,7 @@ History/Doc (pure)                                          src/pipeline/documen
 | B | `src/tracking/**` (except LandmarkSource.ts), `src/components/**`, `src/state/**`, `src/lib/**`, `src/app/page.tsx`, `src/app/layout.tsx`, `src/app/globals.css`, `public/sounds/**` |
 | C | `src/app/api/**`, `src/voice/**`, `src/pipeline/grammar.ts` + `grammar.test.ts`, `src/actions.test.ts`, `public/worklets/**` |
 | D | `docs/**` (except API.md/ARCHITECTURE.md), `README.md`, `.env.example`, `e2e/**`, `playwright.config.ts`, `scripts/**`, `public/fixtures/**`, `docs/pitch.md`, `docs/demo-script.md`, `docs/user-interview.md` |
+| E | Desktop mode (§6a): `helper/**` (Python helper + its tests), `src/desktop/**` (bridge, pure mapping + Vitest, shortcut map, `DesktopPanel.tsx`), `scripts/demo-chrome.sh`. Edits nothing else. |
 | Shared append-only | `DECISIONS.md`, `NEEDS-HUMAN.md`: append with `cat >> FILE <<'EOF'` under a `### [A] title` heading; never rewrite others' entries |
 
 ## Module exports (implement exactly these names; extra exports are fine)
@@ -62,6 +63,34 @@ History/Doc (pure)                                          src/pipeline/documen
 - `src/voice/tts.ts`: `speak(text: string): Promise<void>`; `cancelSpeech(): void`; `setSpeechEnabled(on: boolean): void`; Sonic via `@cartesia/cartesia-js` with the minted token, fallback `speechSynthesis`.
 - `src/voice/cleanupClient.ts`: `requestCleanup(req: CleanupRequest): Promise<CleanupResponse>` (types exported from `src/voice/apiTypes.ts`, zod schemas shared with the routes); Claude log: `logClaudeCall(entry): string`, `resolveClaudeCall(id, result)`, `getClaudeStats(): { calls; accepted; rejected; timeouts }`.
 - `src/voice/keyStatus.ts`: `probeKeys(): Promise<{ cartesia: boolean; anthropic: boolean; online: boolean }>`.
+
+### E: Desktop mode (`src/desktop/*`)
+- `mapping.ts` (pure): `areaPoint(p: Vec2, area: Rect): Vec2` (engine px, which are drawing-area-relative in Desktop mode → screen points); `insideArea(p: Vec2, area: Size): boolean`; `desktopDwellAction(inside: boolean): "pen-toggle" | "click"`.
+- `shortcuts.ts`: `SHORTCUTS: Record<string /* app id, "krita" */, Partial<Record<ActionId, string /* combo */>>>`; Krita macOS: `undo` cmd+z, `redo` cmd+shift+z, `tool.free` b, `tool.eraser` e, `width.thicker` ], `width.thinner` [, `export.png` cmd+s.
+- `bridge.ts`: `export const desktop: DesktopBridge` (singleton, client-only):
+  ```ts
+  interface DesktopBridge {
+    readonly state: "off" | "connecting" | "connected" | "error";
+    readonly error: string | null;          // "Helper not running: run npm run helper" / permission text from the helper
+    readonly screen: Size | null;           // from hello
+    readonly drawingArea: Rect;             // screen points; default whole main display
+    readonly dwellClick: boolean;
+    enable(): Promise<void>;                // connect ws://127.0.0.1:8765, start 100 ms ping
+    disable(): void;                        // sends up, closes socket
+    setDrawingArea(r: Rect): void;          // persisted in localStorage
+    setDwellClick(on: boolean): void;
+    startAreaSetup(): void;                 // corner-dwell flow (top-left, bottom-right) driven by onFrame
+    onFrame(frame: PointerFrame): void;     // B calls every engine frame while enabled (move, dwell-click outside area, up on tracking loss)
+    onPenEvent(ev: PenEvent): void;         // B forwards engine pen events (down/up only inside area)
+    isInside(p: Vec2 | null): boolean;      // engine px → inside drawing area?
+    sendActionKeys(id: ActionId): boolean;  // true if the focused-app shortcut map handled it (B's dispatch then stops)
+    onHotkey(cb: (id: "pen" | "pause") => void): () => void;
+    subscribe(cb: () => void): () => void;  // for useSyncExternalStore
+  }
+  ```
+- `DesktopPanel.tsx`: the narrow side panel (camera thumbnail slot passed as a prop/children, tracking dot, pen state, Mic, Pause, Desktop-mode off, Undo, Krita tool tiles, drawing-area setup, helper status + fix-it text). Uses the shared `Tile` component and `dispatch` from B.
+
+B integrates: when `desktop.toggle` is on → `engine.setCanvasSize({ w: area.w, h: area.h })`, per frame pass `overCanvas = desktop.isInside(pointer)` and `inRestZone = !overCanvas`, forward frames + pen events to `desktop`, route `dispatch()` through `desktop.sendActionKeys(id)` first for app-facing actions (pen, pause, latch, steadier/looser, mic stay in Steady), map hotkeys pen → `pen.toggle`, pause → `pause.toggle` (which must also release the button), render `<DesktopPanel/>` instead of the full layout, and say "Not available in Desktop mode" for canvas-only actions (shape fits, AI cleanup, dictation, ghost view). Tracking loop is driven by `requestVideoFrameCallback` (not rAF) in this mode.
 
 ### B: app
 - `src/state/dispatch.ts`: `dispatch(inv: ActionInvocation): void`; the single place actions execute.

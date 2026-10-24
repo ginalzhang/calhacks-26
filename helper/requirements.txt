@@ -1,0 +1,3 @@
+# Steady desktop helper (macOS). Installed into helper/.venv by `npm run helper`.
+pynput==1.8.2
+websockets==17.3

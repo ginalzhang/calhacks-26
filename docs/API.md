@@ -162,3 +162,44 @@ Errors: `{ "error": "timeout" | "invalid" | "key-missing" | "bad-request", "mess
 The client always shows the result as a **ghost overlay** with Accept (`Enter`) / Reject (`Esc`, `Backspace`, `Z`);
 nothing is replaced until Accept. Every call is logged to `localStorage["steady.claudeLog"]` as
 `{ at, route, mode, summary, latencyMs, result: "accepted" | "rejected" | "timeout" | "error" | "pending" }`.
+
+---
+
+## Desktop-mode helper WebSocket (§6a; not an HTTP route)
+
+`helper/steady_helper.py` (Python 3, `pynput` + `websockets`) listens on **`ws://127.0.0.1:8765` only** and rejects
+any connection whose `Origin` header is not the allowed origin (default `http://localhost:3000`; override with the
+`STEADY_ORIGIN` env var, e.g. `http://localhost:3217` for the agents' shared dev server). One client at a time.
+All messages are JSON text frames. Coordinates are **screen points** of the main display (top-left origin).
+
+Browser → helper:
+```json
+{ "t": "move", "x": 812.4, "y": 433.0 }
+{ "t": "down" }
+{ "t": "up" }
+{ "t": "click" }
+{ "t": "keys", "combo": "cmd+z" }
+{ "t": "ping" }
+```
+- `ping` every 100 ms while connected. **Fail safe:** the helper releases the mouse button if no message arrives for
+  300 ms, when the socket closes, and on exit / Ctrl-C / any exception. The button is never left held.
+- `down` is only sent while the pointer is inside the drawing area; the helper also refuses `down` while a
+  previous `down` is held and treats a second `up` as a no-op.
+- `combo` grammar: `+`-joined, modifiers `cmd|ctrl|alt|shift` then one key (`a`–`z`, `0`–`9`, `[`, `]`, `f1`–`f12`, `esc`, `enter`, `tab`, `delete`).
+
+Helper → browser:
+```json
+{ "t": "hello", "screen": { "w": 1512, "h": 982 }, "version": 1, "permissions": { "accessibility": true, "inputMonitoring": true } }
+{ "t": "hotkey", "id": "pen" }
+{ "t": "hotkey", "id": "pause" }
+{ "t": "error", "msg": "Enable Accessibility for Terminal in System Settings › Privacy & Security › Accessibility" }
+```
+Global hotkeys (defaults, remappable from Settings via `{ "t": "config", "hotkeys": { "pen": "f8", "pause": "f9" } }`):
+**F8 = pen toggle, F9 = pause tracking and release the button.** Never Space, letters or modifiers.
+
+Protocol additions (implemented by agent E in `helper/` + `src/desktop/bridge.ts`):
+- helper → browser `{ "t": "state", "down": true | false, "reason"?: "…" }` on every button change.
+- `hello` extra fields: `"hotkeys": { "pen": "f8", "pause": "f9" }`, `"hotkeysAvailable": true | false | null`.
+- browser → helper `{ "t": "config", "area": { "x": 0, "y": 0, "w": 1512, "h": 982 } | null }`: the helper itself refuses `down` outside the area and releases before a move leaves it (sent alongside `hotkeys`).
+- `{ "t": "keys", "combo": "cmd+z", "app": "krita" }`: optional `app` brings that app to the front first (tapping a Steady tile focuses Chrome, so the shortcut would otherwise go to Chrome); error "Krita is not open…" if it isn't running.
+- A second client is refused with HTTP 409; a bad or missing `Origin` with HTTP 403 (before the WebSocket upgrade).
