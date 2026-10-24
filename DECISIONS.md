@@ -180,3 +180,9 @@ Format: `### [owner] title` + what was decided + why.
 - dispatch: pen, pause, latch, steadier/looser, mic and the desktop.* ids stay in Steady; everything else tries `desktop.sendActionKeys(id)` first, then canvas-only ids answer "… is not available in Desktop mode". `pen.toggle` during area setup calls `desktop.markCorner()`; pause also calls `desktop.release()`.
 - Helper hotkeys map pen → `pen.toggle`, pause → `pause.toggle`. The Desktop layout is E's `<DesktopPanel camera={<CameraPreview/>}/>` plus the typed box (narrow, 440 px). The rule-9 Desktop-mode sentence was added to the first-run privacy text with this integration.
 - Not done (deferred by the lead): camera picker, Mirror/Rotate, direction check, Desk View posture default.
+
+### [D] README round 2 (Desktop mode, metrics, tests)
+- Metrics are documented exactly as B implemented them (`roughness()` over the last 1.5 s, 9-sample centred moving average, recomputed every 300 ms, rounded to 0.1 px; `lastStrokeMs` for every pen-up including tracking loss; command success = resolved-to-actions ÷ submitted). A **clarify reply counts as a miss** in the success rate, and whole-task times are timed by hand (the app does not compute them); the README says both plainly instead of describing a nicer formula.
+- Privacy is §0 rule 9 from the updated spec, verbatim including the Desktop-mode sentence, minus the Ask Steady sentence (checked by script against PROMPT.md).
+- The README Tests section pastes the real summary lines from runs on 2026-10-24 (Vitest 227, Playwright 22 + 1 skipped, helper 37), not the counts from the brief.
+- Hardware tips now lead with Desk View (the spec's new option (a)) and say Head mode is not available in this build; the earlier "break reminders are on by default" line was removed because none are built.

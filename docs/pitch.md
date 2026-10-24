@@ -25,6 +25,7 @@
   - Hands-free input exists without a canvas: Talon (voice + eye/head control for coding), Project Gameface, Camera Mouse and Enable Viacam (face/head as a mouse), Apple Head Pointer and Voice Control, Windows Voice Access. They move a cursor; they don't help you draw a steady line.
   - Stabilisers exist only for people who can already hold a stylus: Procreate's and Krita's stroke stabilisers, Lazy Nezumi.
   - Voice drawing exists without hand input: VoiceDraw, ARTiculate.
+- **The same steady hand works in any app:** Desktop mode drives the real mouse, so you paint in Krita (or Figma, Photoshop) with the same filter, hold-still pen and voice commands ("undo", "eraser"), and the mouse button is released the moment tracking is lost.
 - Smoothing that's measured, not vibes: a One Euro filter tuned against tremor frequencies, a dead zone for slow movement, and a calibration that sets it for *your* hand in 10 seconds.
 - Privacy by default: camera frames never leave the browser.
 - "Next: a five-person pilot with an occupational therapist. Come try it; hold still to start."

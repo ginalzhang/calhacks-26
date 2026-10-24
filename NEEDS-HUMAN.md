@@ -61,3 +61,8 @@ Overnight, P0 was checked only with synthesised landmarks (ReplaySource) and Pla
    - Pen down and painting, then hide your hand (or cover the camera): within ~0.3 s the stroke stops and **the mouse button is released** (click elsewhere in Krita to confirm nothing is still held). Same with F9 (pause), with Ctrl-C in the helper terminal, and with closing the Steady tab mid-stroke.
    - Turn Desktop mode off: the button is released and the normal canvas returns.
 6. If the pointer moves but Krita does not paint, Krita may not accept synthetic drags: note it and try another app (e.g. Preview's markup or Figma) to separate helper vs. Krita issues.
+
+## [D] Desktop mode: demo and docs follow-ups
+- [ ] Re-record the 90 s fallback video so it includes demo step (3b): Desktop mode on, two or three strokes in Krita beside Chrome, "undo", "eraser", Exit Desktop mode.
+- [ ] On the demo laptop, before judging: start Chrome with `npm run demo-chrome`, set the Krita drawing area once (it is remembered), then turn Desktop mode off again. The demo script's checklist (step 5) assumes this.
+- [ ] README › "Desktop mode" was written from the code, the helper's unit tests and a `--dry-run` run, not from painting in real Krita. After the first real Krita run (E's checklist above), correct anything that differs, e.g. if Krita does not accept synthetic drags or a permission name is different.

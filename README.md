@@ -35,7 +35,7 @@ The local grammar, the typed-command box, drawing, shape cleanup, undo and expor
 
 **Hardware tips**
 
-- **Camera:** an external webcam, or a phone used as a webcam (Continuity Camera / Phone Link), on a stand looking down at the desk tracks a resting hand best. Second choice: push the laptop back and tilt the lid about 30° down. Third: Head mode.
+- **Camera:** a camera looking down at the desk tracks a resting hand best. The team demos with macOS **Desk View** (an iPhone on top of the MacBook display via Continuity Camera); pick it in Chrome's site settings › Camera (an in-app camera picker is not built yet). Any external webcam or phone-as-webcam on a stand looking down works the same way. Second choice: push the laptop back and tilt the lid about 30° down. (Head mode is listed on the setup screen but not available yet.)
 - **Rest your wrist** on the desk, a book or a rolled towel. Let your other fingers curl loosely; you don't need to point.
 - **Light:** a clip lamp aimed at the desk. Dim light lowers detection confidence (more so for darker skin tones); the app warns when the frame is too dark.
 - **Microphone:** a headset mic. Laptop mics in a loud hall miss commands.
@@ -46,13 +46,45 @@ The local grammar, the typed-command box, drawing, shape cleanup, undo and expor
 **Key map** (every other key does nothing; keys type normally inside text boxes):
 `Space` pen toggle · `Enter` activate the focused control / Accept · `Esc` cancel · `Backspace` or `Z` undo · `Y` redo · `M` mic · `R` recenter · `P` pause tracking · `1`–`3` choose an option.
 
-**Tests**
+Tests: see [Tests](#tests) below.
 
-```bash
-npm test                     # Vitest: pipeline, grammar, action table
-npx playwright install chromium
-npm run test:e2e             # Playwright with ReplaySource (no camera needed)
-```
+## Desktop mode (draw in Krita and any app)
+
+Desktop mode lets the same filtered pointer, hold-still pen, Latch, voice and safety rules drive the **real macOS mouse pointer**, so you can paint in **Krita** (our demo app), Figma, Photoshop or any other app without holding a mouse or stylus. Steady's own canvas stays the place to calibrate, practise and show the Demo panel. macOS only.
+
+**Set up (once)**
+
+1. **Start the helper** in a terminal and leave it open:
+   ```bash
+   npm run helper        # creates helper/.venv, installs pynput + websockets, starts the helper
+   ```
+   Add `-- --dry-run` to print mouse and key actions instead of performing them.
+2. **macOS permissions**, for *the app that runs the terminal* (Terminal, iTerm, VS Code…), in System Settings › Privacy & Security:
+   - **Accessibility**: to move and click the mouse and send shortcut keys.
+   - **Input Monitoring**: for the global F8 / F9 hotkeys while Krita has focus.
+
+   Quit the helper (Ctrl-C) and run `npm run helper` again after granting them. The helper prints which permission is missing, and Steady's Desktop panel shows the same text.
+3. **`STEADY_ORIGIN`:** the helper only accepts the page at `http://localhost:3000`. If Steady runs anywhere else, tell it, e.g. `STEADY_ORIGIN=http://localhost:3217 npm run helper` (a comma-separated list is allowed; exact matches only).
+4. **Krita:** install it from krita.org and set **brush smoothing to None** (Tool Options docker of the Freehand Brush tool › Brush Smoothing: None). Steady already smooths; smoothing twice adds lag.
+5. **Window layout:** place Chrome **beside** Krita, never behind it. Chrome pauses the camera loop in a fully covered window, and then nothing paints (the button is released). As a fallback, `npm run demo-chrome` opens Chrome at `http://localhost:3000` with background throttling off (`--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling`) in a separate profile under `/tmp`; grant camera and mic once in that profile. `STEADY_URL=http://localhost:3217 npm run demo-chrome` opens another address.
+
+**Use it**
+
+- Turn on **Desktop mode** (tile under Setup, or say or type "desktop mode"). Steady shrinks to a narrow side panel (camera thumbnail with tracking dot, pen state, Mic, Pause, Exit Desktop mode, Undo and the Krita tool tiles) and shows "Helper: Connected". Desktop mode always starts off when the page loads.
+- **Set drawing area:** hold still (or press F8) on the top-left and then the bottom-right corner of the Krita canvas. Without it, the drawing area is the whole main display. Your calibrated active box maps onto this area.
+- **Inside the area,** holding still puts the pen down (the mouse button is held, so Krita paints) and holding still again lifts it, exactly as on Steady's canvas. **Outside the area,** holding still does one left click, so you can pick Krita tools and menus (turn this off with the **Dwell click** toggle). Steady never presses the button outside the area.
+- **Keys:** while Krita has focus the browser gets no key presses, so the helper owns two global hotkeys: **F8 = pen toggle**, **F9 = pause tracking (and release the button)**. They can be remapped to other function keys in Settings, never to Space, letters or modifiers (Krita uses those). On a Mac laptop the F-keys may be media keys: hold **`fn`** (`fn`+F8), or turn on System Settings › Keyboard › "Use F1, F2, etc. keys as standard function keys". A USB switch can be programmed to send F8.
+- **Voice and typed commands** use the same grammar. App actions become Krita shortcuts sent through the helper (Krita is brought to the front first): "undo" `cmd+z`, "redo that" `cmd+shift+z`, "free" = Brush tool `b`, "eraser" `e` (a toggle in Krita: say it again to switch back), "thick" = bigger brush `]`, "thin" = smaller brush `[`, "export picture" = save the Krita document `cmd+s`. The panel's Brush, Eraser, Bigger, Smaller and Save tiles send the same keys. Pen, pause, Latch, steadier / looser and the mic stay inside Steady. Canvas-only features (shape fits, AI cleanup, dictation, ghost view, colours, pages) say "not available in Desktop mode".
+
+**Fail-safe rules** (the mouse button is never left held):
+
+- The helper listens on `127.0.0.1:8765` only and rejects any page whose `Origin` is not the allowed one (otherwise any website could move your mouse). One page at a time.
+- The helper releases the button if no message arrives for **300 ms** (Steady pings every 100 ms), when the connection closes or drops, on F9, and on exit, Ctrl-C, SIGTERM or any error.
+- Steady releases the button on tracking loss (> 300 ms, the same rule as on the canvas), on Pause, when Desktop mode is turned off, and by itself if camera frames stop for 300 ms (for example a covered window).
+- Pen-down is refused outside the drawing area, and a move that leaves the area releases the button first, so it never drags outside it.
+- Before sending shortcut keys the button is released and modifiers are always released afterwards, even on error. The hotkey listener runs in a separate child process and reports only function keys; no other keystrokes are read. Nothing leaves this computer.
+
+**What was verified:** the helper's 37 unit tests (fake mouse controller) and a `--dry-run` run against the browser bridge. Nobody has painted in real Krita yet; that is the first item in `NEEDS-HUMAN.md` › "[E] Desktop mode (Krita) checks".
 
 ## Cartesia features used
 
@@ -96,17 +128,53 @@ Every Claude result that changes the page is shown as a **ghost overlay first** 
 
 The Demo panel (`?demo=1`) shows these live, so the numbers on screen are evidence rather than decoration.
 
-- **Deviation (roughness), raw vs smoothed, px.** Over the last 1.5 s of pointer samples `p_1 … p_N` in canvas px, with `m_i` the centred moving average of `p_{i−4} … p_{i+4}` (about ±130 ms at 30 fps):
-  `deviation = sqrt( (1 / (N − 8)) · Σ_{i=5}^{N−4} |p_i − m_i|² )`.
-  It is computed twice: on the raw landmark mapped to the canvas with no filtering, and on the smoothed pointer after the One Euro filter and the dead zone. Slow intended movement barely changes the moving average, so this isolates the high-frequency shake that smoothing is meant to remove. Lower is steadier; the drop from raw to smoothed is what Steadiness buys.
-- **Task time (last stroke), ms.** `t_pen-up − t_pen-down` for the most recent stroke, whatever caused each event (dwell, key, voice, tile). For a whole task (e.g. "write your name") time from the first pen-down to the last pen-up.
-- **Command success rate.** `matched / total`, where `total` counts every voice or typed command submitted and `matched` counts those that resolved to at least one action (by the local grammar or by Claude). "Didn't catch that" (no match, timeout or invalid output) counts as a miss.
+- **Deviation (roughness), raw vs smoothed, px.** Take the pointer samples `p_1 … p_N` (canvas px) from the last 1.5 s. Let `m_i` be the centred moving average of the 9 samples `p_{i−4} … p_{i+4}` (about ±130 ms at 30 fps, including `p_i` itself). Then
+  `deviation = sqrt( (1 / (N − 8)) · Σ_{i=5}^{N−4} |p_i − m_i|² )`, and it is 0 when `N < 9`.
+  It is computed twice from the same frames:
+  - **raw:** the landmark mapped to the canvas with no filtering (after simulated tremor, when that is on);
+  - **smoothed:** the visible cursor after the One Euro filter and the dead zone.
+
+  It is recomputed every 300 ms and shown to 0.1 px. Slow intended movement barely moves away from its own moving average, so this isolates the high-frequency shake that smoothing is meant to remove. Lower is steadier; the drop from raw to smoothed is what Steadiness buys. (Code: `roughness()` in `src/state/runtime.ts`, using `rmsDeviation()` from `src/pipeline/metrics.ts`.)
+- **Task time (last stroke).** `round(t_pen-up − t_pen-down)` in ms for the most recent pen-up, whatever caused each event (dwell, key, voice, tile or tracking loss). The panel shows it in seconds to 0.1 s. Whole-task times (e.g. "write your name": first pen-down to last pen-up) are timed by hand; the app does not compute them.
+- **Command success rate.** `matched / total`, shown as "X of Y (Z %)". `total` counts every voice or typed command submitted (including `window.__steady.command` in tests). `matched` counts those that resolved directly to actions, by the local grammar or by Claude. A clarify question (numbered options) and "Didn't catch that" (no match, timeout, invalid output, offline) both count as misses.
 - **Claude calls.** `N calls, X accepted, Y rejected, Z timeouts` from the local call log.
 - **Camera / detection fps.** Frames per second over the last second. The app warns below 25 detection fps, because at low rates an 8–12 Hz tremor aliases into the 3–7 Hz drawing band where no filter can remove it.
 
 ## Privacy
 
-Camera frames never leave the browser. Microphone audio goes to Cartesia (or Google, in the Web Speech fallback) only while the mic is open. A command the local grammar cannot match (its text, never audio, plus your last three actions) and, only when you explicitly ask for AI cleanup, stroke data plus a PNG crop go to our server and on to Anthropic. Nothing else leaves the browser.
+Camera frames never leave the browser. Microphone audio goes to Cartesia (or Google, in the Web Speech fallback) only while the mic is open. A command the local grammar cannot match (its text, never audio, plus your last three actions) and, only when you explicitly ask for AI cleanup, stroke data plus a PNG crop go to our server and on to Anthropic. Nothing else leaves the browser. In Desktop mode the browser also sends pointer positions and shortcut keystrokes to a helper program on this same computer (`127.0.0.1` only); the helper never sends anything off the machine.
+
+## Tests
+
+Run on 2026-10-24 against the current tree (no camera, no keys, no network needed):
+
+```bash
+npm test                          # Vitest: pipeline, grammar, action table, API schemas, Desktop-mode mapping
+npx playwright install chromium   # once
+npm run test:e2e                  # Playwright: ReplaySource fixtures drive the real app in Chromium
+npm run test:helper               # Python unittest for the Desktop-mode helper (fake mouse controller)
+```
+
+`npm test` (Vitest):
+```
+ Test Files  23 passed (23)
+      Tests  227 passed (227)
+```
+`npm run test:e2e` (Playwright, Chromium):
+```
+  1 skipped
+  22 passed (48.8s)
+```
+`npm run test:helper` (Python unittest):
+```
+Ran 37 tests in 4.042s
+
+OK
+```
+
+- **Playwright** (`e2e/`, fixtures in `public/fixtures/`): calibration completes; hold-still pen-down and pen-up draw exactly one stroke; a hand resting for 10 s leaves no ink; the shaky word "hi" is one stroke; typed "make it a circle" converts the last stroke; Save PNG and typed "export picture" download a real PNG; tracking loss mid-stroke lifts the pen and keeps it up; the too-dark warning; the Demo panel metrics; Backspace / Y / Z undo-redo; Space toggles the pen; keys type normally inside the command box; Esc and Enter cancel a destructive dialog and typed "yes" confirms; tile size, names, aria-pressed and focus ring; canvas, live region and slider labels; Steadiness 0 vs 100 draws visibly different strokes; "steadier" / "looser".
+- **Skipped:** the fake-webcam run (`e2e/fake-camera.spec.ts`) needs a real 5 s recording at `e2e/assets/hand.y4m`, which is not in the repo yet (see `NEEDS-HUMAN.md`).
+- **Not covered by automated tests:** a real webcam and MediaPipe, a real microphone, the live Cartesia and Anthropic APIs (keys were absent; mocks were used), a screen reader, and painting in real Krita.
 
 ## From hackathon to Monday
 
@@ -124,6 +192,10 @@ Camera frames never leave the browser. Microphone audio goes to Cartesia (or Goo
 - Dysarthric and accented speech: accuracy not measured.
 - English only.
 - Multiple tabs open on Steady compete for the camera.
-- Neck fatigue in Head mode; break reminders are on by default.
+- Neck fatigue in Head mode (Head mode itself is not available in this build).
 - Two hands in the frame: only one is tracked, and it may switch.
+- **Desktop mode is macOS only** (no Windows or Linux helper).
+- **No pressure or tilt in other apps:** Krita and other apps get a plain mouse drag, so brush pressure dynamics do nothing.
+- **Single monitor:** Desktop mode drives the main display only; the drawing area must be on it.
+- Desktop mode's shortcut map covers Krita only: in other apps the pointer, painting and dwell-clicks work, but "undo", "eraser" and the tool tiles are sent only to Krita (if Krita is not open, nothing is sent and the panel says so).
 - Everything above was built and tested overnight with synthesised landmark data (ReplaySource) and Playwright; see `NEEDS-HUMAN.md` for what still has to be verified on a real webcam.
