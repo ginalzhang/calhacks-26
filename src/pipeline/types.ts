@@ -36,7 +36,7 @@ export type PointerLandmark = 8 | 5 | 9;
 export interface FilterParams {
   /** One Euro min cutoff, Hz. Default 0.6. */
   minCutoff: number;
-  /** One Euro beta. Default 0.005 (may be changed by the beta sweep; see DECISIONS.md). */
+  /** One Euro beta. Default 0.01 (beta sweep over 0.003–0.01 from the spec's 0.005; see DECISIONS.md "[A] One Euro acceptance interpretation"). */
   beta: number;
   /** One Euro derivative cutoff, Hz. Default 1.0. */
   dCutoff: number;
@@ -76,7 +76,7 @@ export interface PipelineSettings {
   simulateTremor: boolean;
 }
 
-export const DEFAULT_FILTER: FilterParams = { minCutoff: 0.6, beta: 0.005, dCutoff: 1.0 };
+export const DEFAULT_FILTER: FilterParams = { minCutoff: 0.6, beta: 0.01, dCutoff: 1.0 };
 
 export const DEFAULT_SETTINGS: PipelineSettings = {
   steadiness: 50,
@@ -148,6 +148,10 @@ export interface PointerFrame {
   dwell: DwellState;
   /** Pen events produced while processing this frame (usually empty). */
   events: PenEvent[];
+  /** True while points should be appended to the live stroke (pen down AND over the canvas). */
+  inking?: boolean;
+  /** True on the first frame after tracking is re-acquired ("Tracking back. Pen is up."). */
+  reacquired?: boolean;
 }
 
 /** Input to the PointerEngine for one camera frame. */
@@ -252,7 +256,11 @@ export type DocCommand =
   | { type: "delete-page"; pageId: string }
   | { type: "rename-page"; pageId: string; name: string }
   | { type: "switch-page"; pageId: string }
-  | { type: "set-page-props"; pageId: string; background?: "light" | "dark"; guides?: boolean };
+  | { type: "set-page-props"; pageId: string; background?: "light" | "dark"; guides?: boolean }
+  | { type: "remove-texts"; pageId: string; ids: string[] }
+  /** Internal inverses used by document.ts for exact undo. */
+  | { type: "restore-page"; page: Page }
+  | { type: "restore-pages"; pages: Page[]; currentPageId: string };
 
 export interface HistoryEntry {
   /** Human label for the persistent "Undo: <label>" affordance, e.g. "stroke", "make it a circle". */
