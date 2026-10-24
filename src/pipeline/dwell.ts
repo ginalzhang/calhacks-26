@@ -15,6 +15,9 @@
  *    after 600 ms AND (by default, see DECISIONS.md "[A] Pen-down re-arm also needs a move")
  *    once the point has moved > r_in from the pen-up anchor, so a resting hand toggles at most
  *    once in every scenario. Latch disables the pen-up dwell entirely.
+ *  - Tracking loss (disarmUntilMoved): the pen-down dwell stays disarmed until the point has
+ *    moved > r_in from the first re-acquired point, so flickery detection over a resting hand
+ *    never pens down (DECISIONS.md "[A] No pen-down dwell after re-acquire until a move").
  *
  * TILE dwell: separate, see createTileDwell().
  */
@@ -61,6 +64,13 @@ export interface InkDwell {
   notifyPenUp(at: Vec2 | null, t: number): void;
   /** Drop partial fills and the stillness window (re-acquire, remap). Arming is kept. */
   clearWindow(t: number): void;
+  /**
+   * Tracking loss: disarm the pen-down dwell until the point has moved > r_in from the FIRST
+   * point seen after this call (the re-acquired point). Explicit pen toggles are unaffected.
+   */
+  disarmUntilMoved(): void;
+  /** True once the point moved > r_in from the last pen-down anchor (pen-up dwell arming, ignoring Latch). */
+  readonly movedSincePenDown: boolean;
   /** Back to the initial state (pen-down armed). */
   reset(): void;
   readonly state: DwellState;
@@ -81,6 +91,8 @@ export function createInkDwell(opts: { requireMoveAfterPenUp?: boolean } = {}): 
   let penUpT = -Infinity;
   let penUpAnchor: Vec2 | null = null;
   let movedAway = true;
+  /** Set by disarmUntilMoved(): the next HOVER point becomes the move-away anchor. */
+  let anchorOnNext = false;
 
   // pen-up side
   let armedUp = false;
@@ -105,6 +117,12 @@ export function createInkDwell(opts: { requireMoveAfterPenUp?: boolean } = {}): 
 
       if (pen === "HOVER") {
         still = null;
+        if (anchorOnNext) {
+          anchorOnNext = false;
+          penUpAnchor = { x: p.x, y: p.y };
+          movedAway = false;
+          armedDown = false;
+        }
         // Re-arm after a pen-up: 600 ms and (optionally) a move away from where it lifted.
         if (!armedDown) {
           if (!movedAway && (!penUpAnchor || dist(p, penUpAnchor) > cfg.rIn)) movedAway = true;
@@ -186,6 +204,7 @@ export function createInkDwell(opts: { requireMoveAfterPenUp?: boolean } = {}): 
 
     notifyPenDown(at, _t) {
       void _t;
+      anchorOnNext = false;
       penDownAnchor = { ...at };
       armedUp = false;
       still = null;
@@ -193,6 +212,7 @@ export function createInkDwell(opts: { requireMoveAfterPenUp?: boolean } = {}): 
     },
 
     notifyPenUp(at, t) {
+      anchorOnNext = false;
       penUpT = t;
       penUpAnchor = at ? { ...at } : null;
       armedDown = false;
@@ -206,12 +226,20 @@ export function createInkDwell(opts: { requireMoveAfterPenUp?: boolean } = {}): 
       still = null;
     },
 
+    disarmUntilMoved() {
+      armedDown = false;
+      movedAway = false;
+      anchorOnNext = true;
+      clearDown(null);
+    },
+
     reset() {
       clearDown(null);
       armedDown = true;
       penUpT = -Infinity;
       penUpAnchor = null;
       movedAway = true;
+      anchorOnNext = false;
       armedUp = false;
       penDownAnchor = null;
       still = null;
@@ -220,6 +248,10 @@ export function createInkDwell(opts: { requireMoveAfterPenUp?: boolean } = {}): 
 
     get state() {
       return last;
+    },
+
+    get movedSincePenDown() {
+      return armedUp;
     },
   };
   return api;

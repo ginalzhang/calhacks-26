@@ -32,8 +32,11 @@
  * pen HOVER, pointer frozen at its last value. lossReason: "too-dark" when the last reported
  * luma < 40, else "low-fps" when detection fps < 25, else "no-hand". On re-acquire the filters
  * and lazy brush restart at the new point (`frame.reacquired` is true for that frame) and the
- * pen stays up until an explicit pen-down (dwell / Space / voice / face). Gaps ≤ 300 ms freeze
- * the pointer without lifting the pen.
+ * pen stays up until an explicit pen-down: Space / voice / typed / tile / face work at once;
+ * the pen-down DWELL is disarmed until the pointer has moved > r_in from the first re-acquired
+ * point (so flickery detection over a resting hand never inks). A tracking-lost pen-up on a
+ * stroke that never moved > r_in carries trimFromT = its start (no dot left behind).
+ * Gaps ≤ 300 ms freeze the pointer without lifting the pen.
  *
  * Extra frame fields beyond PointerFrame (see EngineFrame): inking, reacquired, quality, box.
  */
@@ -132,11 +135,17 @@ export function createPointerEngine(settings: PipelineSettings, canvas: Size, vi
   const goLost = (t: number, events: PenEvent[]) => {
     lost = true;
     if (pen === "DRAWING") {
+      // A stroke that never moved > r_in since its pen-down (a resting hand) is dropped
+      // entirely (trimFromT = its start) so tracking flicker never leaves a dot.
+      const trim = strokeOpen && !dwell.movedSincePenDown ? { trimFromT: strokeOpenedT } : {};
       pen = "HOVER";
       strokeOpen = false;
-      events.push({ type: "pen-up", t, cause: "tracking-lost" });
+      events.push({ type: "pen-up", t, cause: "tracking-lost", ...trim });
       dwell.notifyPenUp(filtered, t);
     }
+    // Whatever the pen state: no pen-down dwell after re-acquire until a deliberate move
+    // (> r_in from the first re-acquired point). Explicit toggles still work immediately.
+    dwell.disarmUntilMoved();
     dwellState = { kind: null, progress: 0, anchor: null, armed: dwell.state.armed };
   };
 

@@ -198,10 +198,8 @@ describe("PointerEngine: tracking loss (design rule 10)", () => {
     expect(back.pen).toBe("HOVER");
     expect(back.pointer!.x).toBeCloseTo(500, 0); // filters restarted at the new point, no glide
     expect(e.pen).toBe("HOVER");
-    // The next pen-down needs an explicit act: here a fresh 800 ms dwell at the new spot.
-    const later = run(drawingThenLoss(1000), 5000).events.slice(2);
-    expect(later.map((x) => `${x.type}:${x.cause}`)).toEqual(["pen-down:dwell"]);
-    expect(later[0].t).toBeGreaterThanOrEqual(3000 + 800);
+    // A hand resting where it was re-acquired never pens down by dwell…
+    expect(run(drawingThenLoss(1000), 10_000).events.slice(2)).toEqual([]);
   });
 
   it("lifts the pen even under Latch", () => {
@@ -233,6 +231,59 @@ describe("PointerEngine: tracking loss (design rule 10)", () => {
     const warn = run(() => ({ canvas: { x: 1, y: 1 }, luma: 20 }), 100).frames[1];
     expect(warn.tracking).toBe("ok");
     expect(warn.quality).toBe("too-dark");
+  });
+});
+
+describe("PointerEngine: flicker / re-acquire never inks a resting hand", () => {
+  /** Still hand (rest jitter) with null gaps of 300–500 ms every ~1.5 s (seeded). */
+  const flicker = (firstGapAt: number, seed = 21) => {
+    const g = gaussian(seed);
+    const gaps: [number, number][] = [];
+    for (let t = firstGapAt; t < 10_000; ) {
+      const len = 300 + 200 * Math.abs(Math.sin(g() * 10));
+      gaps.push([t, t + len]);
+      t += len + 1000 + 500 * Math.abs(Math.sin(g() * 10));
+    }
+    const n = noisy(seed);
+    return (t: number): Step => (gaps.some(([a, b]) => t >= a && t < b) ? { canvas: null, luma: 30 } : { canvas: n({ x: 600, y: 300 }), luma: 30 });
+  };
+
+  it("flicker (300–500 ms gaps every ~1.5 s) over a still hand for 10 s → zero pen-downs", () => {
+    const { events, frames } = run(flicker(500), 10_000);
+    expect(frames.filter((f) => f.reacquired).length).toBeGreaterThanOrEqual(4);
+    expect(events.filter((e) => e.type === "pen-down")).toHaveLength(0);
+  });
+
+  it("if the first gap comes after the initial dwell: one toggle at most, and no ink is left", () => {
+    const { events, frames } = run(flicker(1500, 5), 10_000);
+    expect(events.filter((e) => e.type === "pen-down").length).toBeLessThanOrEqual(1);
+    expect(record(frames).strokes).toHaveLength(0); // tracking-lost pen-up trims the unmoved stroke
+  });
+
+  it("after re-acquire, a deliberate move followed by a dwell still pens down", () => {
+    const base = flicker(500, 8);
+    const path = (t: number): Step => {
+      if (t < 6000) return base(t);
+      if (t < 6500) return { canvas: { x: 600 + 0.12 * (t - 6000), y: 300 } }; // 60 px move
+      return { canvas: { x: 660, y: 300 } };
+    };
+    const { events } = run(path, 8000);
+    const downs = events.filter((e) => e.type === "pen-down");
+    expect(downs).toHaveLength(1);
+    expect(downs[0].cause).toBe("dwell");
+    expect(downs[0].t).toBeGreaterThanOrEqual(6000 + 800); // needs ~800 ms of stillness after the move began
+  });
+
+  it("Space / voice / typed / tile pen-downs work immediately after re-acquire", () => {
+    for (const cause of ["key", "voice", "typed", "tile"] as const) {
+      const e = createPointerEngine(BASE, CANVAS, VIDEO);
+      e.process({ t: 0, camera: { x: 320, y: 240 } });
+      e.process({ t: 400, camera: null });
+      const back = e.process({ t: 433, camera: { x: 320, y: 240 } });
+      expect(back.reacquired).toBe(true);
+      expect(e.togglePen(434, cause)).toMatchObject({ type: "pen-down", cause });
+      expect(e.pen).toBe("DRAWING");
+    }
   });
 });
 
