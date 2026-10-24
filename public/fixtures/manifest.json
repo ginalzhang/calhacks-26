@@ -1,0 +1,89 @@
+{
+  "still-10s": {
+    "file": "/fixtures/still-10s.json",
+    "frames": 300,
+    "durationS": 10,
+    "description": "Hand resting still at the centre for 10 s with ~1 px low-pass rest jitter. Expect at most one pen toggle and zero strokes.",
+    "expect": "<= 1 pen toggle, 0 strokes"
+  },
+  "calibration": {
+    "file": "/fixtures/calibration.json",
+    "frames": 240,
+    "durationS": 8,
+    "description": "Calibration: 3 s resting still (step 1, rest jitter), then a 4 s comfortable clockwise circle (~156x140 camera px, step 2), then 1 s still.",
+    "stillS": [
+      0,
+      3
+    ],
+    "circleS": [
+      3,
+      7
+    ],
+    "circleBoxCameraPx": {
+      "w": 156,
+      "h": 140.4
+    },
+    "circlePathPx": 467
+  },
+  "dwell-stroke": {
+    "file": "/fixtures/dwell-stroke.json",
+    "frames": 174,
+    "durationS": 5.8,
+    "description": "Still 1.5 s (pen-down dwell fires at ~0.8-1.1 s) -> 2 s left-to-right stroke on screen (130 camera px, ~390 canvas px at 3x) -> still 2.3 s (pen-up dwell at ~1.2 s). Expect exactly 1 stroke.",
+    "strokeS": [
+      1.5,
+      3.5
+    ],
+    "strokeCameraPx": 130,
+    "cruisePxPerS": 77,
+    "expect": "1 pen-down (dwell), 1 pen-up (dwell), 1 stroke"
+  },
+  "word-tremor": {
+    "file": "/fixtures/word-tremor.json",
+    "frames": 261,
+    "durationS": 8.7,
+    "description": "Still 1.5 s -> cursive \"hi\" (389 camera px over 4.6 s, ~90 px/s) with ~6 Hz +/-5 px tremor during movement (+/-1.5 px at rest) -> still 2.6 s. Expect 1 legible stroke after smoothing.",
+    "word": "hi",
+    "wordS": [
+      1.5,
+      6.1
+    ],
+    "pathCameraPx": 389,
+    "cruisePxPerS": 90,
+    "tremorHz": 6,
+    "tremorPx": 5,
+    "expect": "1 stroke"
+  },
+  "circle-stroke": {
+    "file": "/fixtures/circle-stroke.json",
+    "frames": 210,
+    "durationS": 7,
+    "description": "Still 1.5 s -> roughly circular clockwise closed stroke (r ~52 camera px, ~3 % radius wobble, small closing gap) in 3.2 s -> still 2.3 s. Expect 1 stroke; 'make it a circle' turns it into kind 'circle'.",
+    "strokeS": [
+      1.5,
+      4.7
+    ],
+    "radiusCameraPx": 52,
+    "cruisePxPerS": 111,
+    "expect": "1 stroke, fits circle"
+  },
+  "tracking-lost": {
+    "file": "/fixtures/tracking-lost.json",
+    "frames": 165,
+    "durationS": 5.5,
+    "description": "Still 1.5 s (pen down by dwell) -> stroke in progress for 1.5 s -> 1 s of null frames (no hand) mid-stroke at 3.00 s -> hand back elsewhere, moving for 1 s -> 0.5 s still (too short to re-arm a pen-down dwell). Expect the pen to lift > 300 ms into the loss and stay up after re-acquire.",
+    "lostS": [
+      3,
+      4
+    ],
+    "expect": "pen HOVER from ~lost+0.3 s; tracking 'lost' during gap; pen stays HOVER after; 1 stroke"
+  },
+  "too-dark": {
+    "file": "/fixtures/too-dark.json",
+    "frames": 325,
+    "durationS": 10.83,
+    "description": "Like still-10s but in a dim room: luma 25, noisier rest jitter (~1.5 px) and intermittent null frames (0.2-0.6 s gaps every 0.8-1.6 s). Expect 'too dark' tracking warning.",
+    "luma": 25,
+    "expect": "status mentions dark; lossReason 'too-dark' during gaps; 0 strokes"
+  }
+}
