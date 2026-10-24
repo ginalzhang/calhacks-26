@@ -1,0 +1,275 @@
+/* Imported by SteadyApp after globals.css, so these rules win. */
+/* ======================================================================
+ * Layout v2 (round 2): on desktop-sized screens everything fits the viewport
+ * (1280×800 and up never scrolls, Demo panel open or not); the canvas flexes to
+ * fill what is left. Narrow screens / 200 % zoom stack vertically (page reflows,
+ * no scroll containers anywhere in the toolbar or panels).
+ * ====================================================================== */
+.workspace {
+  grid-template-columns: minmax(0, 1fr) 480px;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+.side-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.side-top .preview,
+.side-top .slider {
+  border: none;
+  padding: 0;
+  border-radius: 0;
+}
+.side .tile-grid {
+  gap: 8px;
+}
+.side .tile {
+  min-width: 82px;
+  min-height: 64px;
+  flex: 1 0 82px;
+  max-width: calc(20% - 7px);
+}
+.side .toolbar {
+  padding: 8px;
+}
+
+/* Preview is always a row: thumbnail left, state right. */
+.preview {
+  flex-direction: row;
+  align-items: flex-start;
+}
+.preview-box {
+  width: 293px;
+  height: 220px;
+  aspect-ratio: auto;
+  flex: none;
+}
+.preview-collapsed .preview-box {
+  width: 120px;
+  height: 90px;
+}
+
+.slider-compact .slider-head {
+  margin-bottom: 0;
+}
+.slider-compact input[type="range"] {
+  height: 36px;
+}
+
+.topbar {
+  padding: 6px 16px;
+  gap: 0.75rem;
+}
+.status-line {
+  min-height: 44px;
+}
+.undo-affordance {
+  min-height: 64px;
+}
+
+.typed-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+}
+.typed-compact > label {
+  flex: none;
+}
+.typed-compact .typed-row {
+  flex: 1;
+  margin-top: 0;
+}
+
+.demo-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  grid-template-columns: none;
+  gap: 6px;
+  padding: 6px 12px 8px;
+}
+.demo-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.demo-controls h2 {
+  margin: 0;
+  flex: none;
+}
+.stage {
+  position: relative;
+}
+.demo-panel .tile {
+  min-width: 96px;
+}
+.demo-panel .metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 20px;
+  margin: 0;
+}
+.demo-panel .metrics div {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  border: none;
+  padding: 0;
+}
+.demo-panel .metrics dd {
+  text-align: left;
+  white-space: nowrap;
+}
+.demo-panel .metrics dt::after {
+  content: ":";
+}
+
+.quote-card {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 96px));
+  z-index: 15;
+  background: #f6f1fc;
+  border: 3px solid #6a2fb0;
+  border-left-width: 8px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 0;
+}
+
+.panel {
+  overflow: visible;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.panel-body {
+  flex: 1;
+}
+.panel-page {
+  font-weight: 400;
+  color: var(--muted);
+}
+.panel-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 2px solid #8a8a8a;
+}
+.keylist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 4px 16px;
+  margin: 0;
+}
+.keylist div {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.keylist dd {
+  margin: 0;
+}
+.presets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.presets li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.phrase-list {
+  columns: 2 260px;
+  margin: 0;
+}
+
+/* Desktop-sized screens: fixed-height app, canvas fills the remaining height. */
+@media (min-width: 1000px) and (min-height: 640px) {
+  .app:not(.app-desktop) {
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app:not(.app-desktop) .workspace {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .stage {
+    min-height: 0;
+  }
+  .stage-inner {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .canvas-frame {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    padding: 32px;
+  }
+  .drawing-canvas {
+    height: auto;
+    min-height: 0;
+    flex: 1;
+    width: 100%;
+  }
+  .side {
+    min-height: 0;
+  }
+}
+
+/* Narrow / zoomed: stack; canvas gets a fixed share of the height. */
+@media (max-width: 999px), (max-height: 639px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .drawing-canvas {
+    height: max(320px, 60vh);
+  }
+  .preview-box {
+    width: 180px;
+    height: 135px;
+  }
+  .side .tile {
+    max-width: none;
+  }
+  .demo-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .typed-compact {
+    flex-wrap: wrap;
+  }
+}
+
+/* Setup overlay covers the stage column; never a scroll container. */
+.calibration {
+  inset: 0;
+  overflow: visible;
+}
+
+/* Neutralise the round-1 three-column Demo layout (still in a stale dev-server stylesheet). */
+.workspace.with-demo {
+  grid-template-columns: minmax(0, 1fr) 480px;
+}
+@media (max-width: 999px), (max-height: 639px) {
+  .workspace.with-demo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

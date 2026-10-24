@@ -6,15 +6,15 @@ import { USER_QUOTE } from "@/lib/quote";
 import { ActionTile, TileButton } from "./Tile";
 
 /**
- * Demo panel (§7): Simulate tremor, ghost view, live metrics, Next judge (?demo=1 only).
- * The first demo screen shows one sentence from the user interview.
+ * Demo panel (§7) as a compact strip under the canvas, so a 1280×800 laptop never scrolls:
+ * Simulate tremor, ghost view, Next judge (?demo=1 only) and the live metrics.
+ * Steadier / Looser live under Setup and the Steadiness slider is always beside the tools.
  */
 export default function DemoPanel() {
   const open = useStore((s) => s.demoOpen);
   const m = useStore((s) => s.metrics);
   const tremor = useStore((s) => s.tremor);
   const ghost = useStore((s) => s.ghost);
-  const quoteSeen = useStore((s) => s.demoQuoteSeen);
   const steadiness = useStore((s) => s.settings.steadiness);
   if (!open) return null;
   const rate = m.commandsTotal ? Math.round((100 * m.commandsMatched) / m.commandsTotal) : null;
@@ -22,39 +22,24 @@ export default function DemoPanel() {
 
   return (
     <section className="demo-panel" aria-labelledby="demo-title">
-      <h2 id="demo-title">Demo</h2>
-      {!quoteSeen && (
-        <figure className="quote">
-          <blockquote>
-            <p>{USER_QUOTE.placeholder ? USER_QUOTE.text : `“${USER_QUOTE.text}”`}</p>
-          </blockquote>
-          <figcaption>{USER_QUOTE.who}</figcaption>
-          <button type="button" className="link-button" onClick={() => setState({ demoQuoteSeen: true })}>
-            Hide quote
-          </button>
-        </figure>
-      )}
-      <div className="tile-grid">
-        <ActionTile id="tremor.toggle" pressed={tremor} />
-        <ActionTile id="ghost.toggle" pressed={ghost} />
-        <ActionTile id="steadier" />
-        <ActionTile id="looser" />
-        {getParams().demo && <ActionTile id="judge.next" />}
+      <div className="demo-controls">
+        <h2 id="demo-title">Demo</h2>
+        <div className="tile-grid">
+          <ActionTile id="tremor.toggle" pressed={tremor} />
+          <ActionTile id="ghost.toggle" pressed={ghost} />
+          {getParams().demo && <ActionTile id="judge.next" />}
+        </div>
       </div>
       <dl className="metrics" aria-label="Live numbers">
         <div>
-          <dt>Deviation, raw camera path (RMS)</dt>
+          <dt>Deviation raw (RMS)</dt>
           <dd data-metric="deviationRawPx">{m.deviationRawPx.toFixed(1)} px</dd>
         </div>
         <div>
-          <dt>Deviation, smoothed cursor (RMS)</dt>
+          <dt>Deviation smoothed</dt>
           <dd data-metric="deviationSmoothedPx">
-            {m.deviationSmoothedPx.toFixed(1)} px{drop !== null && drop > 0 ? ` (${drop}% less)` : ""}
+            {m.deviationSmoothedPx.toFixed(1)} px{drop !== null && drop > 0 ? ` (−${drop}%)` : ""}
           </dd>
-        </div>
-        <div>
-          <dt>Steadiness</dt>
-          <dd>{steadiness} of 100</dd>
         </div>
         <div>
           <dt>Last stroke time</dt>
@@ -62,22 +47,41 @@ export default function DemoPanel() {
         </div>
         <div>
           <dt>Command success</dt>
-          <dd data-metric="commands">{rate === null ? "–" : `${m.commandsMatched} of ${m.commandsTotal} (${rate}%)`}</dd>
+          <dd data-metric="commands">{rate === null ? "–" : `${m.commandsMatched}/${m.commandsTotal} (${rate}%)`}</dd>
         </div>
         <div>
           <dt>Claude calls</dt>
           <dd data-metric="claude">
-            {m.claudeCalls} calls, {m.claudeAccepted} accepted, {m.claudeRejected} rejected, {m.claudeTimeouts} timeouts
+            {m.claudeCalls} ({m.claudeAccepted} accepted, {m.claudeRejected} rejected, {m.claudeTimeouts} timeouts)
           </dd>
         </div>
         <div>
           <dt>Camera / detection fps</dt>
           <dd data-metric="fps">
-            {m.cameraFps} / {m.detectionFps} fps
+            {m.cameraFps} / {m.detectionFps}
           </dd>
         </div>
+        <div>
+          <dt>Steadiness</dt>
+          <dd>{steadiness} of 100</dd>
+        </div>
       </dl>
-      <TileButton tileId="demo.close" label="Close demo panel" onActivate={() => setState({ demoOpen: false })} />
     </section>
+  );
+}
+
+/** First demo screen: the user-interview sentence over the canvas until dismissed (any action). */
+export function QuoteCard() {
+  const open = useStore((s) => s.demoOpen);
+  const seen = useStore((s) => s.demoQuoteSeen);
+  if (!open || seen) return null;
+  return (
+    <figure className="quote quote-card" aria-labelledby="quote-cap">
+      <blockquote>
+        <p>{USER_QUOTE.placeholder ? USER_QUOTE.text : `“${USER_QUOTE.text}”`}</p>
+      </blockquote>
+      <figcaption id="quote-cap">{USER_QUOTE.who}</figcaption>
+      <TileButton tileId="quote.hide" label="Hide quote" keepFocus onActivate={() => setState({ demoQuoteSeen: true })} />
+    </figure>
   );
 }

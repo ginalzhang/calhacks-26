@@ -16,8 +16,31 @@ export default function ContextPanel() {
   const clarify = useStore((s) => s.clarify);
   const nearest = useStore((s) => s.nearest);
   const mic = useStore((s) => s.mic);
+  const face = useStore((s) => s.face);
 
   if (overlay?.kind === "dictation") return <Dictation />;
+
+  if (face.calibrating !== null) {
+    return (
+      <section className="context-panel" aria-labelledby="ctx-face">
+        <h2 id="ctx-face">Face tap check</h2>
+        <p>{face.signal === "jawOpen" ? "Open your mouth comfortably twice, then rest." : "Raise your eyebrows comfortably twice, then rest."}</p>
+        <div
+          className="calib-progress"
+          role="progressbar"
+          aria-label="Face tap check"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(face.calibrating * 100)}
+        >
+          <div className="calib-progress-fill" style={{ width: `${Math.round(face.calibrating * 100)}%` }} />
+        </div>
+        <div className="tile-grid">
+          <ActionTile id="cancel" label="Cancel check" />
+        </div>
+      </section>
+    );
+  }
 
   if (overlay?.kind === "busy") {
     return (

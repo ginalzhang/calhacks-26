@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useStore } from "@/state/store";
 import { boot } from "@/state/setup";
 import { installKeyboard } from "@/state/keyboard";
@@ -16,24 +16,14 @@ import FirstRun from "./FirstRun";
 import Calibration from "./Calibration";
 import ConfirmDialog from "./ConfirmDialog";
 import ContextPanel from "./ContextPanel";
-import DemoPanel from "./DemoPanel";
+import DemoPanel, { QuoteCard } from "./DemoPanel";
 import { AdvancedPanel, HelpPanel, SettingsPanel } from "./Panels";
 import Banners from "./Banners";
+import "./layout.css";
 import DesktopPanel from "@/desktop/DesktopPanel";
 
 let booted = false;
 
-function useWide() {
-  const [wide, setWide] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1500px)");
-    const on = () => setWide(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return wide;
-}
 
 export default function SteadyApp() {
   const phase = useStore((s) => s.phase);
@@ -41,7 +31,6 @@ export default function SteadyApp() {
   const panel = useStore((s) => s.panel);
   const demoOpen = useStore((s) => s.demoOpen);
   const desktopOn = useStore((s) => s.desktopOn);
-  const wide = useWide();
 
   useEffect(() => {
     installHooks();
@@ -89,25 +78,22 @@ export default function SteadyApp() {
             <h1 className="sr-only">Steady drawing page</h1>
             <div className="stage-inner">
               <DrawingCanvas />
-              {phase === "calibrating" && <Calibration />}
-              {panel === "help" && <HelpPanel />}
-              {panel === "settings" && <SettingsPanel />}
-              {panel === "advanced" && <AdvancedPanel />}
+              <QuoteCard />
             </div>
-            <div className={`stage-bottom${demoOpen && !wide ? " with-demo" : ""}`}>
-              <TypedCommand />
-              {!wide && <DemoPanel />}
-            </div>
+            <TypedCommand compact />
+            <DemoPanel />
+            {/* Overlays cover the whole stage column so each page fits without scrolling. */}
+            {phase === "calibrating" && <Calibration />}
+            {panel === "help" && <HelpPanel />}
+            {panel === "settings" && <SettingsPanel />}
+            {panel === "advanced" && <AdvancedPanel />}
           </main>
-          {demoOpen && wide && (
-            <div className="demo-column">
-              <DemoPanel />
-            </div>
-          )}
           <aside className="side" aria-label="Controls">
-            <CameraPreview />
+            <div className="side-top">
+              <CameraPreview />
+              <SteadinessSlider compact />
+            </div>
             <ContextPanel />
-            <SteadinessSlider />
             <Toolbar />
           </aside>
         </div>

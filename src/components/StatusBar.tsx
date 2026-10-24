@@ -18,6 +18,7 @@ export default function StatusBar() {
   const pen = useStore((s) => s.pen);
   const keys = useStore((s) => s.keys);
   const online = useStore((s) => s.online);
+  const reminder = useStore((s) => s.reminder);
   const label = undoLabel(history);
   const showAlert = !!alert && status.id === alert.id;
 
@@ -35,15 +36,16 @@ export default function StatusBar() {
         </p>
       </div>
       <div className="status-chips">
+        {reminder && <span className="chip chip-warn">{reminder}</span>}
         {heard && <span className="chip">Heard: {heard}</span>}
         {!online && <span className="chip chip-warn">Offline: voice and AI help are off; typed commands work</span>}
         {keys && (!keys.cartesia || !keys.anthropic) && (
           <span className="chip">
             {!keys.cartesia && !keys.anthropic
-              ? "Keys missing: browser voice, sample AI"
+              ? "Keys missing: sample mode"
               : !keys.cartesia
-                ? "Voice key missing: browser voice"
-                : "AI key missing: sample answers"}
+                ? "Voice key missing"
+                : "AI key missing"}
           </span>
         )}
         <button

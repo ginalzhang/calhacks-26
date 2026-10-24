@@ -31,9 +31,16 @@ import { pickPointer, pointerIndex } from "@/tracking/pointerLandmark";
 import { fixtureUrl, getParams } from "@/lib/params";
 import { earcon, tick } from "@/lib/earcons";
 import { KEYS, load, save } from "@/lib/persist";
-import { getState, setState, setStatus, type CalibrationUI } from "./store";
+import { getState, setState, setStatus, type CalibrationUI, type FaceSignal } from "./store";
 import { commit, page } from "./docOps";
 import { desktop } from "@/desktop/bridge";
+import { toDoc, type View } from "@/lib/view";
+import { calibrateFaceTap, createFaceTap, MIC_SUPPRESS_MS, type FaceTapDetector } from "@/lib/faceTap";
+import { breakMessage, createBreakTimer } from "@/lib/breaks";
+import { detrendedRms } from "@/pipeline/calibration";
+import { suggestSteadiness } from "@/pipeline/steadiness";
+import type { CalibrationResult, Rect } from "@/pipeline/types";
+import { micClosedAt } from "./voice";
 
 export interface LiveStroke {
   id: string;
@@ -46,10 +53,23 @@ interface CalibCapture {
   stage: "rest" | "circle";
   startT: number | null;
   rest: TimedPoint[];
+  /** Raw mirrored camera px during the rest step (Head mode neutral position). */
+  restRaw: TimedPoint[];
   circle: TimedPoint[];
   handedness: "Left" | "Right" | null;
   lastUiT: number;
 }
+
+/** Per-mode reach (Hand and Head mode keep their own gain, box and calibration). */
+interface ModeSetup {
+  gain: number;
+  activeBox: Rect | null;
+  calibration: CalibrationResult | null;
+}
+
+export const HEAD_GAIN_DEFAULT = 6;
+/** "Open your mouth comfortably twice": face-tap check length. */
+export const FACE_CAL_MS = 6000;
 
 export const REST_MS = 3000;
 export const CIRCLE_MS = 4000;
@@ -77,6 +97,13 @@ class Runtime {
   lastFrameAt = 0;
   luma: number | null = null;
   started = false;
+  /** Saved reach for the mode that is not active. */
+  modes: Partial<Record<"hand" | "head", ModeSetup>> = {};
+  /** Called on a face tap (set by setup.ts → dispatch pen.toggle via "face"). */
+  onFaceTap: (() => void) | null = null;
+  private faceTap: FaceTapDetector | null = null;
+  private faceCal: { samples: { t: number; v: number }[]; startT: number | null; lastUiT: number } | null = null;
+  private breaks = createBreakTimer();
   private penDownT = 0;
   private rawBuf: TimedPoint[] = [];
   private smoothBuf: TimedPoint[] = [];
@@ -99,7 +126,9 @@ class Runtime {
     } else {
       const { MediaPipeSource } = await import("@/tracking/MediaPipeSource");
       const setup = load<{ deviceId?: string | null } | null>(KEYS.setup, null);
-      src = new MediaPipeSource({ deviceId: setup?.deviceId ?? null });
+      const mp = new MediaPipeSource({ deviceId: setup?.deviceId ?? null });
+      mp.onJawOpenCheck = (ok) => this.onJawOpenCheck(ok);
+      src = mp;
     }
     this.source = src;
     this.unsub = src.onFrame(this.onLandmarks);
@@ -211,6 +240,8 @@ class Runtime {
     this.trackMetrics(f);
     if (calibrating && st.calib?.measuring) this.captureCalibration(f, lf);
     else this.trackTiles(f);
+    this.trackFace(lf);
+    this.trackBreaks(f);
   };
 
   /** P2b frame path: same engine, but "canvas" = the desktop drawing area; no ink on Steady's page. */
@@ -234,6 +265,8 @@ class Runtime {
     desktop.onFrame(f);
     this.trackTracking(f);
     this.trackMetrics(f);
+    this.trackFace(lf);
+    this.trackBreaks(f);
   }
 
   isOverCanvas(p: Vec2): boolean {
@@ -299,6 +332,8 @@ class Runtime {
     }
     if (ev.type === "pen-down") {
       this.penDownT = ev.t;
+      if (st.demoOpen && !st.demoQuoteSeen) setState({ demoQuoteSeen: true });
+      if (st.reminder) setState({ reminder: null });
       if (st.sounds) earcon("down");
       setState({ pen: "DRAWING" });
       setStatus(st.tool === "eraser" ? "Pen down (eraser)" : st.tool === "straight" ? "Pen down (straight line)" : "Pen down");
@@ -317,8 +352,20 @@ class Runtime {
     }
   }
 
+  /** Current zoom / move view (identity unless the user zoomed). */
+  view(): View {
+    const s = getState();
+    return { zoom: s.zoom, pan: s.pan };
+  }
+
+  /** Canvas px → document coordinates (ink is stored in document space). */
+  toDoc(p: Vec2): Vec2 {
+    return toDoc(p, this.view());
+  }
+
   private startLive(at: Vec2, t: number) {
-    this.live = { id: newId("s"), points: [{ x: at.x, y: at.y, t }], raw: [], startT: t };
+    const d = this.toDoc(at);
+    this.live = { id: newId("s"), points: [{ x: d.x, y: d.y, t }], raw: [], startT: t };
   }
 
   private trackInk(f: EngineFrame) {
@@ -329,7 +376,7 @@ class Runtime {
     if (st.tool === "eraser") {
       if (p && over && this.erasing) {
         const visible = page().strokes.filter((s) => !this.erasing!.has(s.id));
-        const hits = eraserHits(visible, p, Math.max(12, st.width * 2));
+        const hits = eraserHits(visible, this.toDoc(p), Math.max(12, st.width * 2) / st.zoom);
         if (hits.length) {
           hits.forEach((id) => this.erasing!.add(id));
           setState((s) => ({ renderVersion: s.renderVersion + 1 }));
@@ -341,8 +388,11 @@ class Runtime {
     // left-canvas pen-up / pen-down boundaries so strokes never get a connecting line.
     if (f.inking && p) {
       if (!this.live) this.startLive(p, f.t);
-      else this.live.points.push({ x: p.x, y: p.y, t: f.t });
-      if (f.rawCanvas) this.live?.raw.push({ ...f.rawCanvas });
+      else {
+        const d = this.toDoc(p);
+        this.live.points.push({ x: d.x, y: d.y, t: f.t });
+      }
+      if (f.rawCanvas) this.live?.raw.push(this.toDoc(f.rawCanvas));
     }
   }
 
@@ -383,14 +433,15 @@ class Runtime {
     const p = this.frame?.pointer ?? this.lastPointer;
     const st = getState();
     if (!p || !this.isOverCanvas(p)) return false;
-    const stroke = finalizeStroke([{ x: p.x, y: p.y, t: performance.now() }], {
+    const d = this.toDoc(p);
+    const stroke = finalizeStroke([{ x: d.x, y: d.y, t: performance.now() }], {
       id: newId("s"),
       colour: st.colour,
       width: st.width,
       rIn: rIn(st.settings),
     });
     if (!stroke) return false;
-    commit("dot", [{ type: "add-stroke", pageId: page().id, stroke: { ...stroke, kind: "dot", points: [{ x: p.x, y: p.y }] } }]);
+    commit("dot", [{ type: "add-stroke", pageId: page().id, stroke: { ...stroke, kind: "dot", points: [{ x: d.x, y: d.y }] } }]);
     return true;
   }
 
@@ -522,8 +573,10 @@ class Runtime {
   beginCalibration(scope: CalibrationUI["scope"]): void {
     this.live = null;
     this.penUp("tile");
-    const stage = scope === "recenter" ? "circle" : "rest";
-    this.calib = { stage, startT: null, rest: [], circle: [], handedness: null, lastUiT: 0 };
+    // Head mode: one 3 s "hold still" step sets the neutral position (and the rest shake).
+    const head = getState().settings.mode === "head";
+    const stage = scope === "recenter" && !head ? "circle" : "rest";
+    this.calib = { stage, startT: null, rest: [], restRaw: [], circle: [], handedness: null, lastUiT: 0 };
     const prevAsked = getState().calib?.askedLarger ?? false;
     setState({
       phase: "calibrating",
@@ -555,15 +608,18 @@ class Runtime {
     if (f.tracking !== "ok" || !f.filtered || !f.rawCamera) {
       if (f.t - c.lastUiT > 500) {
         c.lastUiT = f.t;
-        setState({ calib: { ...ui, message: "I can't see your hand yet. Rest it where the camera can see it; there's no rush." } });
+        const what = getState().settings.mode === "head" ? "your face" : "your hand";
+        setState({ calib: { ...ui, message: `I can't see ${what} yet. There's no rush; the timer waits for you.` } });
       }
       return;
     }
     if (c.startT === null) c.startT = f.t;
     if (lf.handedness) c.handedness = lf.handedness;
     const dur = c.stage === "rest" ? REST_MS : ui.scope === "recenter" ? RECENTER_MS : CIRCLE_MS;
-    if (c.stage === "rest") c.rest.push({ ...f.filtered, t: f.t });
-    else c.circle.push({ ...f.rawCamera, t: f.t });
+    if (c.stage === "rest") {
+      c.rest.push({ ...f.filtered, t: f.t });
+      c.restRaw.push({ ...f.rawCamera, t: f.t });
+    } else c.circle.push({ ...f.rawCamera, t: f.t });
     const progress = Math.min(1, (f.t - c.startT) / dur);
     if (progress < 1) {
       if (f.t - c.lastUiT > 100) {
@@ -573,6 +629,10 @@ class Runtime {
       return;
     }
     // Step complete.
+    if (getState().settings.mode === "head") {
+      this.finishHeadCalibration(c, ui);
+      return;
+    }
     if (c.stage === "rest" && ui.scope === "full") {
       c.stage = "circle";
       c.startT = null;
@@ -650,6 +710,203 @@ class Runtime {
     }
   }
 
+  // ------------------------------------------------------------ Head mode (§2 P3)
+
+  /** Switch Hand ↔ Head mode. Each mode keeps its own gain, active box and calibration. */
+  async setHeadMode(on: boolean): Promise<boolean> {
+    const st = getState();
+    const cur = st.settings.mode;
+    const next = on ? "head" : "hand";
+    if (cur === next) return true;
+    const src = this.source as (LandmarkSource & { setMode?: (m: "hand" | "face") => Promise<void> }) | null;
+    if (src?.kind === "mediapipe" && src.setMode) {
+      setStatus(on ? "Starting head tracking…" : "Starting hand tracking…");
+      try {
+        await src.setMode(on ? "face" : "hand");
+      } catch (e) {
+        setStatus(`${(e as Error)?.message ?? e} Staying in ${cur === "head" ? "Head" : "Hand"} mode.`);
+        return false;
+      }
+    }
+    this.penUp("tile");
+    this.live = null;
+    this.modes[cur] = { gain: st.settings.gain, activeBox: st.settings.activeBox, calibration: st.calibration };
+    const saved = this.modes[next] ?? { gain: on ? HEAD_GAIN_DEFAULT : 3, activeBox: null, calibration: null };
+    this.updateSettings({ mode: next, gain: on ? Math.max(3, saved.gain) : saved.gain, activeBox: saved.activeBox });
+    setState({ calibration: saved.calibration });
+    this.engine?.reset(performance.now());
+    this.breaks.reset();
+    persistSetup();
+    setStatus(
+      on
+        ? `Head mode on: move your nose to move the cursor (gain ${Math.max(3, saved.gain).toFixed(1)}×). Look at the middle of the screen and say “recenter” to set your neutral position.`
+        : "Hand mode on.",
+    );
+    return true;
+  }
+
+  private finishHeadCalibration(c: CalibCapture, ui: CalibrationUI) {
+    const st = getState();
+    const prev = st.calibration;
+    const n = c.restRaw.length || 1;
+    const neutral = { x: c.restRaw.reduce((a, p) => a + p.x, 0) / n, y: c.restRaw.reduce((a, p) => a + p.y, 0) / n };
+    const gain = Math.max(3, st.settings.gain || HEAD_GAIN_DEFAULT);
+    const w = this.canvasSize.w / gain;
+    const h = this.canvasSize.h / gain;
+    const activeBox = ui.scope === "remeasure" && prev ? prev.activeBox : { x: neutral.x - w / 2, y: neutral.y - h / 2, w, h };
+    const restJitterRms = ui.scope === "recenter" && prev ? prev.restJitterRms : detrendedRms(c.rest);
+    const suggested = suggestSteadiness(restJitterRms, 0);
+    const result: CalibrationResult = {
+      restJitterRms,
+      kineticResidualRms: 0,
+      activeBox,
+      gain,
+      hand: "unknown",
+      suggestedSteadiness: suggested,
+      circleTooSmall: false,
+      completedAt: Date.now(),
+    };
+    this.calib = null;
+    this.updateSettings({ activeBox, gain, restJitterRms, dwellEnabled: st.settings.dwellEnabled });
+    if (ui.scope !== "recenter") this.setSteadiness(suggested);
+    this.engine?.reset(performance.now());
+    setState({ calibration: result, phase: "ready", calib: null, previewCollapsed: true, pen: "HOVER" });
+    persistSetup();
+    setStatus(ui.scope === "recenter" ? "Neutral position set. Move your head gently to move the cursor." : `Head setup done: neutral position set, gain ${gain.toFixed(1)}×.`);
+  }
+
+  // ------------------------------------------------------------ face tap (§3 P3)
+
+  private onJawOpenCheck(ok: boolean) {
+    if (ok) return;
+    const f = getState().face;
+    console.warn("[Steady] jawOpen blendshape missing: face tap disabled");
+    setState({ face: { ...f, jawOpenMissing: true, enabled: false, calibrating: null } });
+    this.faceCal = null;
+    if (f.enabled || f.calibrating !== null) setStatus("Face tap is unavailable: the face model gave no mouth signal on this computer.");
+  }
+
+  /** Turn face tap on (runs the short check first if needed) or off. */
+  async setFaceTap(on: boolean): Promise<void> {
+    const f = getState().face;
+    if (!on) {
+      this.faceCal = null;
+      this.faceTap = null;
+      setState({ face: { ...f, enabled: false, calibrating: null } });
+      await this.faceSignals(false);
+      setStatus("Face tap off.");
+      return;
+    }
+    if (f.jawOpenMissing) {
+      setStatus("Face tap is unavailable: the face model gave no mouth signal on this computer. Space, voice and dwell still work.");
+      return;
+    }
+    if (!(await this.faceSignals(true))) return;
+    if (f.calibration && f.calibration.signal === f.signal) {
+      this.faceTap = createFaceTap(f.calibration);
+      setState({ face: { ...f, enabled: true } });
+      setStatus(f.signal === "jawOpen" ? "Face tap on: open and close your mouth once to toggle the pen." : "Face tap on: raise your eyebrows once to toggle the pen.");
+      return;
+    }
+    this.faceCal = { samples: [], startT: null, lastUiT: 0 };
+    setState({ face: { ...f, calibrating: 0 } });
+    setStatus(f.signal === "jawOpen" ? "Face tap check: open your mouth comfortably twice." : "Face tap check: raise your eyebrows comfortably twice.");
+  }
+
+  cancelFaceCalibration() {
+    if (!this.faceCal) return;
+    this.faceCal = null;
+    setState({ face: { ...getState().face, calibrating: null } });
+    void this.faceSignals(false);
+    setStatus("Face tap check cancelled.");
+  }
+
+  /** Hand mode needs the face model running alongside for blendshapes. */
+  private async faceSignals(on: boolean): Promise<boolean> {
+    const src = this.source as (LandmarkSource & { setFaceSignals?: (on: boolean) => Promise<void> }) | null;
+    if (!src?.setFaceSignals) return true; // replay: blendshapes come from the fixture
+    if (!on && getState().settings.mode === "head") return true;
+    try {
+      await src.setFaceSignals(on);
+      return true;
+    } catch (e) {
+      setStatus(`${(e as Error)?.message ?? e} Face tap is off.`);
+      return false;
+    }
+  }
+
+  private trackFace(lf: LandmarkFrame) {
+    const st = getState();
+    const face = st.face;
+    if (!this.faceCal && !face.enabled) return;
+    const score = lf.blendshapes ? (lf.blendshapes[face.signal] ?? null) : null;
+    const cal = this.faceCal;
+    if (cal) {
+      if (score === null) {
+        if (lf.t - cal.lastUiT > 1000) {
+          cal.lastUiT = lf.t;
+          setStatus("Face tap check: I can't see your face yet. There's no rush.");
+        }
+        return;
+      }
+      cal.startT ??= lf.t;
+      cal.samples.push({ t: lf.t, v: score });
+      const progress = Math.min(1, (lf.t - cal.startT) / FACE_CAL_MS);
+      if (progress < 1) {
+        if (lf.t - cal.lastUiT > 200) {
+          cal.lastUiT = lf.t;
+          setState({ face: { ...face, calibrating: progress } });
+        }
+        return;
+      }
+      this.faceCal = null;
+      const res = calibrateFaceTap(cal.samples);
+      if (!res) {
+        setState({ face: { ...face, calibrating: null, enabled: false } });
+        void this.faceSignals(false);
+        setStatus(
+          face.signal === "jawOpen"
+            ? "I couldn't see two clear mouth movements. Try Face tap again, or use the eyebrows option in Settings."
+            : "I couldn't see two clear eyebrow raises. Try Face tap again, or use the mouth option in Settings.",
+        );
+        return;
+      }
+      const calibration = { signal: face.signal, open: res.open, close: res.close };
+      this.faceTap = createFaceTap(calibration);
+      setState({ face: { ...face, calibrating: null, enabled: true, calibration } });
+      persistFace();
+      setStatus(face.signal === "jawOpen" ? "Face tap ready: open and close your mouth once to toggle the pen." : "Face tap ready: raise your eyebrows once to toggle the pen.");
+      return;
+    }
+    if (!face.enabled || !this.faceTap) return;
+    // Suppressed while the mic is open and for 500 ms after (speaking moves the jaw).
+    const suppressed =
+      st.mic.open || performance.now() - micClosedAt < MIC_SUPPRESS_MS || st.paused || st.phase !== "ready" || !!st.dialog;
+    if (this.faceTap.update(score, lf.t, suppressed)) this.onFaceTap?.();
+  }
+
+  // ------------------------------------------------------------ break reminders
+
+  private trackBreaks(f: EngineFrame) {
+    const st = getState();
+    const active = f.tracking === "ok" && !st.paused && st.phase === "ready";
+    if (this.breaks.tick(f.t, active, st.settings.mode) && st.breakReminders && !st.reminder) {
+      const msg = breakMessage(st.settings.mode);
+      setState({ reminder: msg });
+      setStatus(msg);
+    }
+  }
+
+  /** Face tap signal: mouth (jawOpen) or eyebrows (browInnerUp). Changing it needs a new check. */
+  setFaceSignal(signal: FaceSignal): void {
+    const f = getState().face;
+    if (f.signal === signal) return;
+    this.faceTap = null;
+    setState({ face: { ...f, signal, enabled: false, calibration: f.calibration?.signal === signal ? f.calibration : null } });
+    persistFace();
+    setStatus(signal === "jawOpen" ? "Face tap will use opening the mouth. Turn Face tap on to check it." : "Face tap will use raising the eyebrows. Turn Face tap on to check it.");
+  }
+
   /** Visible strokes for the renderer (hides strokes being erased). */
   isErasing(id: string): boolean {
     return !!this.erasing?.has(id);
@@ -674,6 +931,7 @@ export function lossMessage(r: TrackingLossReason | null): string {
 }
 
 export function stageMessage(stage: "rest" | "circle"): string {
+  if (getState().settings.mode === "head") return "Look at the middle of the screen and hold your head still.";
   return stage === "rest" ? "Rest your hand and hold still." : "Slowly draw a circle as big as feels easy.";
 }
 
@@ -726,8 +984,16 @@ export function persistSetup() {
     calibration: s.calibration,
     settings: { ...s.settings, simulateTremor: false },
     posture: s.posture,
+    modes: { ...runtime.modes, [s.settings.mode]: { gain: s.settings.gain, activeBox: s.settings.activeBox, calibration: s.calibration } },
     savedAt: Date.now(),
   });
+}
+
+/** Face tap thresholds + choice survive reloads (it stays off until turned on). */
+export function persistFace() {
+  const f = getState().face;
+  const prefs = load<Record<string, unknown>>(KEYS.prefs, {});
+  save(KEYS.prefs, { ...prefs, face: { calibration: f.calibration, signal: f.signal } });
 }
 
 export function inkContrastWarning(colour: keyof typeof COLOUR_HEX, bg: "light" | "dark", ratio: (a: string, b: string) => number) {

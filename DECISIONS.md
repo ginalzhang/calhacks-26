@@ -186,3 +186,33 @@ Format: `### [owner] title` + what was decided + why.
 - Privacy is §0 rule 9 from the updated spec, verbatim including the Desktop-mode sentence, minus the Ask Steady sentence (checked by script against PROMPT.md).
 - The README Tests section pastes the real summary lines from runs on 2026-10-24 (Vitest 227, Playwright 22 + 1 skipped, helper 37), not the counts from the brief.
 - Hardware tips now lead with Desk View (the spec's new option (a)) and say Head mode is not available in this build; the earlier "break reminders are on by default" line was removed because none are built.
+
+### [B] Round 2 layout: fixed-height app on laptop screens, paginated panels
+- On screens ≥ 1000×640 CSS px the app is exactly one viewport tall; the canvas flexes to fill what is left. At 1280×800 with the Demo panel open nothing scrolls (canvas ≈ 680×311; 840×439 at 1440×900). Below that (or at 200 % zoom) the layout stacks and the page reflows vertically; no scroll containers anywhere.
+- The Demo panel is a compact strip under the canvas (Simulate tremor, Ghost view, Next judge + one wrapping line of metrics). Steadier/Looser moved out of it (they are under Setup, and the Steadiness slider is always visible). The interview sentence is a card over the canvas on the first demo screen, dismissed by "Hide quote", any action or the next pen-down.
+- Camera preview and Steadiness share one block; the main grid is 5 tiles wide (≥ 82×64 px each). The Setup sub-panel's Reach slider shows its hint to screen readers only, so the sub-panel fits at 800 px tall.
+- Help, Settings and Advanced are paginated (Back / Next / Close tiles, "page N of M" in the heading, focus moves to the heading on each page) instead of scrolling. They and the setup screen cover the whole stage column. Help: Drawing, If your hand…, Keys, then the phrase list 10 per page. Settings: Reach and holding still, Pen and input, Head mode / face tap / breaks, Setup, Profiles, Presets.
+- The round-2 layout rules live in `src/components/layout.css` (imported by SteadyApp): since the `next.config.ts` change the running dev server stopped picking up edits to `globals.css` (it keeps serving the round-1 build of that file; Tailwind compiles the current file fine). A server restart will pick up `globals.css`; `layout.css` wins either way.
+
+### [B] Self-hosted MediaPipe assets with CDN fallback
+- `/public/mediapipe/`: `hand_landmarker.task` (float16, 7.8 MB, sha256 fbc2a300…cde1), `face_landmarker.task` (float16, 3.8 MB, sha256 64184e22…c9ff), and `wasm/vision_wasm_internal.{js,wasm}` + `vision_wasm_nosimd_internal.{js,wasm}` copied from node_modules 1.1.1 (13.5 MB + 12.6 MB). Total 37 MB. The `vision_wasm_module_internal.*` pair (13.5 MB) was not copied: it is only used with `forVisionTasks(path, useModule = true)`, which Steady doesn't use.
+- Loading order: HEAD-check the local model, then local wasm + model (GPU, then CPU), then the jsDelivr / Google storage URLs (GPU, then CPU). Verified in Chromium with a fake camera: local files load; with `/mediapipe/**` blocked it logs "[Steady] hand model loaded from the CDN fallback" and tracks.
+
+### [B] Zoom / move: view transform, ink in document coordinates
+- `src/lib/view.ts` (pure, Vitest): canvas = doc × zoom + pan; zoom 0.25–4× in steps of 1.25 about the canvas centre; move = 25 % of the canvas per step; "move up" looks further up the page (content slides down). "Fit page" fits everything drawn with a 24 px margin, and is the identity view when the content already fits at 100 %.
+- Default view is the identity, so nothing changes until the user zooms. Ink, dots, eraser hits (radius ÷ zoom), dictated text and ghost raw points are converted to document coordinates; the committed layer, live stroke and AI ghost are drawn through the transform; guide lines cover the visible document area. Line width is in document units (zooming in makes lines look thicker, like paper).
+- Zoom / move are view changes, not edits: not on the undo stack, not saved. Exports and AI crops ignore the view: PNG/print cover the canvas-sized page at 100 %, grown to include anything drawn outside it.
+
+### [B] Head mode
+- FaceLandmarker (outputFaceBlendshapes) via `MediaPipeSource.setMode("face")`; pointer = face landmark 1 (nose tip). Hand and Head mode each keep their own gain, active box and calibration (Head default gain 6×, slider 3–10×), persisted under `steady.setup.modes`.
+- Head setup is a single 3 s "Look at the middle of the screen and hold your head still": the mean raw nose position is the neutral point, the active box is canvas ÷ gain centred on it, rest shake uses A's `detrendedRms`, and Steadiness is suggested with A's `suggestSteadiness(rest, 0)`. Recenter re-measures only the neutral point; Re-measure only the shake.
+- "Use last setup" always resumes in Hand mode (the face model loads on demand when Head mode is turned on).
+- jawOpen assertion: on the first face result, if `faceBlendshapes[0].categories` has no `jawOpen` the app logs it, marks it in state and disables Face tap.
+- Break reminder (`src/lib/breaks.ts`, pure, Vitest): 10 min of tracked time in Head mode, 15 min in Hand mode (gaps over 250 ms don't count). It shows as a status line and chip; any action or the next pen-down dismisses it. Toggle in Settings › Head mode, face tap and breaks (default on).
+
+### [B] Face tap
+- `src/lib/faceTap.ts` (pure, Vitest). A tap = the score (jawOpen, or browInnerUp as the alternative) rises above `open` and falls below `close` within 80–900 ms. Holding it open is never a tap. Hysteresis between the two thresholds; 400 ms refractory time. A face lost mid-open cancels the tap, and so does any open that starts or continues while suppressed.
+- Suppressed while the mic is open, for 500 ms after it closes, while paused, outside the ready phase and while a dialog is open. It is bound to `pen.toggle` only (via "face").
+- Off until checked. The first "Face tap" runs a 6 s "open your mouth comfortably twice" check (no time limit while no face is visible). Thresholds: baseline = 20th percentile, peak = 95th percentile, open = baseline + 55 % of the range, close = baseline + 30 %. Accepted only if the range is ≥ 0.12 and the derived detector finds ≥ 2 taps.
+- The thresholds and the chosen signal persist; Face tap itself is never on at page load. In Hand mode the face model also runs on every other camera frame while Face tap is on or checking.
+- ReplaySource accepts an optional per-frame `bs` blendshape map (a B extension to the fixture format, ignored by everything else), which I used for a synthetic face-tap replay.

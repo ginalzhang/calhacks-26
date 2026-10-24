@@ -43,7 +43,7 @@ export default function TypedCommand({ id = "typed-command", compact = false }: 
           <span className="tile-dwell" aria-hidden="true" />
         </button>
       </div>
-      <p id={`${id}-hint`} className="typed-hint">
+      <p id={`${id}-hint`} className={compact ? "sr-only" : "typed-hint"}>
         Same words as voice. Press Enter to run, Esc to go back to the canvas.
       </p>
     </form>

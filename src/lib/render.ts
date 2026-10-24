@@ -9,7 +9,9 @@
  */
 import { COLOUR_HEX } from "@/actions";
 import { outlineToPath2DString, strokeOutline } from "@/pipeline/strokes";
-import type { Page, Size, Stroke, TextBlock, Vec2 } from "@/pipeline/types";
+import type { Page, Rect, Size, Stroke, TextBlock, Vec2 } from "@/pipeline/types";
+import { strokeBBox } from "@/pipeline/strokes";
+import { isIdentity, unionRect, visibleDocRect, type View } from "./view";
 import { BG_HEX, runtime } from "@/state/runtime";
 import { getState } from "@/state/store";
 import { page as currentPageOf } from "@/state/docOps";
@@ -79,23 +81,27 @@ function drawRaw(ctx: CanvasRenderingContext2D, pts: Vec2[], dark: boolean) {
   ctx.restore();
 }
 
-/** Paint a page (background, guides, strokes, texts) at CSS-px scale on ctx. */
+/**
+ * Paint a page (background, guides, strokes, texts). `ctx` is already in DOCUMENT space;
+ * `region` is the document rect to fill with the background and guide lines.
+ */
 export function paintPage(
   ctx: CanvasRenderingContext2D,
   page: Page,
-  size: Size,
-  opts: { ghost?: boolean; hidden?: (id: string) => boolean } = {},
+  region: Rect,
+  opts: { ghost?: boolean; hidden?: (id: string) => boolean; lineWidth?: number } = {},
 ) {
   ctx.fillStyle = BG_HEX[page.background];
-  ctx.fillRect(0, 0, size.w, size.h);
+  ctx.fillRect(region.x, region.y, region.w, region.h);
   if (page.guides) {
     ctx.save();
     ctx.strokeStyle = GUIDE[page.background];
-    ctx.lineWidth = 1;
-    for (let y = GUIDE_SPACING; y < size.h; y += GUIDE_SPACING) {
+    ctx.lineWidth = opts.lineWidth ?? 1;
+    const first = Math.ceil(region.y / GUIDE_SPACING) * GUIDE_SPACING || GUIDE_SPACING;
+    for (let y = first; y < region.y + region.h; y += GUIDE_SPACING) {
       ctx.beginPath();
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(size.w, y + 0.5);
+      ctx.moveTo(region.x, y + 0.5);
+      ctx.lineTo(region.x + region.w, y + 0.5);
       ctx.stroke();
     }
     ctx.restore();
@@ -135,19 +141,25 @@ export function startRenderLoop(t: RenderTargets): () => void {
       c.height = H;
     }
     const page = currentPageOf();
-    const key = `${st.renderVersion}|${W}x${H}|${st.ghost}|${page.id}`;
+    const view: View = { zoom: st.zoom, pan: st.pan };
+    const key = `${st.renderVersion}|${W}x${H}|${st.ghost}|${page.id}|${view.zoom}|${view.pan.x},${view.pan.y}`;
     if (key !== layerKey) {
       layerKey = key;
       layer.width = W;
       layer.height = H;
       const lctx = layer.getContext("2d")!;
-      lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      paintPage(lctx, page, size, { ghost: st.ghost, hidden: (id) => runtime.isErasing(id) });
+      lctx.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.pan.x, dpr * view.pan.y);
+      paintPage(lctx, page, visibleDocRect(view, size), {
+        ghost: st.ghost,
+        hidden: (id) => runtime.isErasing(id),
+        lineWidth: 1 / view.zoom,
+      });
     }
     const ctx = c.getContext("2d")!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(layer, 0, 0);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Live stroke and AI ghost are in document space too.
+    ctx.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.pan.x, dpr * view.pan.y);
 
     // AI ghost overlay preview (faded; nothing replaced until Accept).
     const ov = st.overlay;
@@ -271,18 +283,34 @@ function ring(ctx: CanvasRenderingContext2D, p: Vec2, r: number, colour: string,
 
 // ------------------------------------------------------------------ export
 
-/** Render a page at devicePixelRatio scale into a fresh canvas (no cursor/overlays). */
-export function renderPageCanvas(page: Page, size: Size, crop?: { x: number; y: number; w: number; h: number }): HTMLCanvasElement {
+/**
+ * Render a document-space region of a page at devicePixelRatio scale into a fresh canvas
+ * (no cursor/overlays, always at zoom 1). Default region: exportRegion().
+ */
+export function renderPageCanvas(page: Page, size: Size, crop?: Rect): HTMLCanvasElement {
   const dpr = window.devicePixelRatio || 1;
   const c = document.createElement("canvas");
-  const r = crop ?? { x: 0, y: 0, w: size.w, h: size.h };
+  const r = crop ?? exportRegion(page, size);
   c.width = Math.max(1, Math.round(r.w * dpr));
   c.height = Math.max(1, Math.round(r.h * dpr));
   const ctx = c.getContext("2d")!;
   ctx.setTransform(dpr, 0, 0, dpr, -r.x * dpr, -r.y * dpr);
-  paintPage(ctx, page, size);
+  paintPage(ctx, page, r);
   return c;
 }
+
+/** What an export contains: the canvas-sized page at zoom 1, grown to include anything drawn outside it. */
+export function exportRegion(page: Page, size: Size): Rect {
+  const base: Rect = { x: 0, y: 0, w: size.w, h: size.h };
+  const pts = [...page.strokes.flatMap((s) => s.points), ...page.texts.map((t) => ({ x: t.x, y: t.y }))];
+  if (!pts.length) return base;
+  const bb = strokeBBox(pts);
+  const pad = 24;
+  const grown = unionRect(base, { x: bb.x - pad, y: bb.y - pad, w: bb.w + 2 * pad, h: bb.h + 2 * pad })!;
+  return { x: Math.floor(grown.x), y: Math.floor(grown.y), w: Math.ceil(grown.w), h: Math.ceil(grown.h) };
+}
+
+export { isIdentity };
 
 export function canvasToBlob(c: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG encoding failed"))), "image/png"));

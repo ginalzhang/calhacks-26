@@ -185,7 +185,8 @@ export class ReplaySource implements LandmarkSource, ReplayControls {
       t,
       landmarks: fr.lm ? fr.lm.map(([x, y, z]) => ({ x, y, z })) : null,
       handedness: fr.lm ? (fr.handedness ?? null) : null,
-      blendshapes: null,
+      // Optional per-frame blendshapes (`bs`, an extension B uses for face-tap fixtures).
+      blendshapes: (fr as { bs?: Record<string, number> }).bs ?? null,
       videoWidth: fx.videoWidth || 640,
       videoHeight: fx.videoHeight || 480,
       luma: typeof fx.luma === "number" ? fx.luma : 128,

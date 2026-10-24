@@ -113,23 +113,6 @@ p {
   }
 }
 
-.stage-bottom {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: start;
-}
-
-@media (min-width: 1100px) {
-  .stage-bottom.with-demo {
-    grid-template-columns: minmax(260px, 1fr) minmax(0, 1.6fr);
-  }
-}
-
-.toolbar .slider {
-  margin-top: 0.75rem;
-}
-
 .stage {
   min-width: 0;
   display: flex;
@@ -969,39 +952,6 @@ kbd {
   outline: 4px solid var(--focus);
   outline-offset: 3px;
   box-shadow: 0 0 0 7px #ffffff;
-}
-
-/* Compact Demo panel: stat boxes. */
-.demo-panel .tile-grid {
-  margin-bottom: 0.5rem;
-}
-.demo-panel .metrics {
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 6px;
-}
-.demo-panel .metrics div {
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 0;
-  border: 2px solid #8a8a8a;
-  border-radius: 8px;
-  padding: 4px 8px;
-}
-.demo-panel .metrics dd {
-  text-align: left;
-}
-.demo-panel .quote {
-  padding: 6px 10px;
-}
-.demo-panel .quote blockquote {
-  font-size: 1rem;
-}
-
-/* Wide screens with the Demo panel open: canvas | demo | controls. */
-@media (min-width: 1500px) {
-  .workspace.with-demo {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px) minmax(320px, 440px);
-  }
 }
 
 .posture {

@@ -20,10 +20,12 @@ export function Slider(props: {
   valueText: string;
   display?: string;
   hint?: string;
+  /** Hint kept for screen readers (aria-describedby) but not shown, to save height. */
+  compact?: boolean;
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="slider">
+    <div className={`slider${props.compact ? " slider-compact" : ""}`}>
       <div className="slider-head">
         <label htmlFor={props.id}>{props.label}</label>
         <output htmlFor={props.id} aria-hidden="true">
@@ -45,7 +47,7 @@ export function Slider(props: {
         }}
       />
       {props.hint && (
-        <p className="slider-hint" id={`${props.id}-hint`}>
+        <p className={props.compact ? "sr-only" : "slider-hint"} id={`${props.id}-hint`}>
           {props.hint}
         </p>
       )}
@@ -53,11 +55,12 @@ export function Slider(props: {
   );
 }
 
-export function SteadinessSlider() {
+export function SteadinessSlider({ compact = false }: { compact?: boolean }) {
   const v = useStore((s) => s.settings.steadiness);
   const calibration = useStore((s) => s.calibration);
   return (
     <Slider
+      compact={compact}
       id="steadiness"
       label="Steadiness"
       min={0}
@@ -71,13 +74,14 @@ export function SteadinessSlider() {
   );
 }
 
-export function GainSlider({ id = "gain" }: { id?: string }) {
+export function GainSlider({ id = "gain", compact = false }: { id?: string; compact?: boolean }) {
   const gain = useStore((s) => s.settings.gain);
   const mode = useStore((s) => s.settings.mode);
   const min = mode === "head" ? 3 : 2;
   return (
     <Slider
       id={id}
+      compact={compact}
       label="Reach (gain)"
       min={min}
       max={10}

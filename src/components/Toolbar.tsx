@@ -26,15 +26,6 @@ const CATEGORIES: { cat: ActionCategory; label: string }[] = [
 
 /** Reachable by voice/typed (with a clear status message) but no tile until the feature exists. */
 export const HIDDEN_TILES = new Set<ActionId>([
-  "zoom.in",
-  "zoom.out",
-  "zoom.fit",
-  "move.up",
-  "move.down",
-  "move.left",
-  "move.right",
-  "mode.head",
-  "face.toggle",
   // P2b Desktop mode: area + dwell click live in E's DesktopPanel; the toggle is under Setup.
   "desktop.area",
   "desktop.dwellclick",
@@ -72,6 +63,10 @@ export function pressedFor(id: ActionId, s: AppState): boolean | undefined {
       return s.ghost;
     case "desktop.toggle":
       return s.desktopOn;
+    case "mode.head":
+      return s.settings.mode === "head";
+    case "face.toggle":
+      return s.face.enabled;
     default:
       if (id.startsWith("colour.")) return s.colour === id.slice(7);
       return undefined;
@@ -119,7 +114,7 @@ export default function Toolbar() {
             />
           ))}
         </div>
-        {sub === "setup" && <GainSlider />}
+        {sub === "setup" && <GainSlider compact />}
       </nav>
     );
   }

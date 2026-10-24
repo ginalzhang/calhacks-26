@@ -142,6 +142,24 @@ export interface AppState {
   profiles: { id: string; name: string }[];
   /** P2b Desktop mode (§6a) is on: the pipeline drives the real mouse through E's helper. */
   desktopOn: boolean;
+  /** Non-blocking break reminder (10 min Head mode, 15 min Hand mode). */
+  breakReminders: boolean;
+  reminder: string | null;
+  face: FaceUI;
+}
+
+export type FaceSignal = "jawOpen" | "browInnerUp";
+
+export interface FaceUI {
+  /** Face tap is on (only possible once calibrated). */
+  enabled: boolean;
+  /** Thresholds measured with "open your mouth comfortably twice". */
+  calibration: { signal: FaceSignal; open: number; close: number } | null;
+  signal: FaceSignal;
+  /** The face model's blendshapes lacked jawOpen at startup: mouth tap disabled. */
+  jawOpenMissing: boolean;
+  /** Face-tap calibration in progress: 0..1. */
+  calibrating: number | null;
 }
 
 export const INITIAL_METRICS: Metrics = {
@@ -210,6 +228,9 @@ const initial: AppState = {
   activeProfileId: null,
   profiles: [],
   desktopOn: false,
+  breakReminders: true,
+  reminder: null,
+  face: { enabled: false, calibration: null, signal: "jawOpen", jawOpenMissing: false, calibrating: null },
 };
 
 type Listener = () => void;

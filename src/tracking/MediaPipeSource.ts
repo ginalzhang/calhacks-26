@@ -1,10 +1,12 @@
 /**
- * MediaPipeSource: webcam + @mediapipe/tasks-vision HandLandmarker (VIDEO mode, 1 hand).
- * - wasm from jsDelivr for the pinned version, float16 model from Google storage (web quickstart).
+ * MediaPipeSource: webcam + @mediapipe/tasks-vision (VIDEO mode, 1 hand / 1 face).
+ * - Self-hosted wasm + float16 models in /public/mediapipe (§1 P3); the jsDelivr / Google
+ *   storage URLs from MediaPipe's web quickstart are the automatic fallback.
  * - GPU delegate with automatic CPU fallback if creation throws.
  * - Detection driven by video.requestVideoFrameCallback, timestamp = performance.now().
  * - No Web Worker. Mean luma sampled from a tiny canvas every ~500 ms.
- * - Head mode (P3): FaceLandmarker with outputFaceBlendshapes, same frame contract.
+ * - Head mode: FaceLandmarker (outputFaceBlendshapes) supplies landmarks + blendshapes.
+ *   Face tap in Hand mode: the face model also runs on every other frame for blendshapes only.
  */
 import type { HandLandmarker, FaceLandmarker } from "@mediapipe/tasks-vision";
 import type { LandmarkFrame, LandmarkSource, SourceMode, SourceStats } from "./LandmarkSource";
@@ -16,6 +18,22 @@ export const HAND_MODEL_URL =
 export const FACE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
+/** Self-hosted copies (§1 P3) in /public/mediapipe; the CDN URLs above are the automatic fallback. */
+export const LOCAL_WASM_URL = "/mediapipe/wasm";
+export const LOCAL_HAND_MODEL_URL = "/mediapipe/hand_landmarker.task";
+export const LOCAL_FACE_MODEL_URL = "/mediapipe/face_landmarker.task";
+
+export interface AssetSet {
+  name: "local" | "cdn";
+  wasm: string;
+  hand: string;
+  face: string;
+}
+export const ASSET_SETS: readonly AssetSet[] = [
+  { name: "local", wasm: LOCAL_WASM_URL, hand: LOCAL_HAND_MODEL_URL, face: LOCAL_FACE_MODEL_URL },
+  { name: "cdn", wasm: WASM_URL, hand: HAND_MODEL_URL, face: FACE_MODEL_URL },
+];
+
 type FrameCb = (f: LandmarkFrame) => void;
 
 export interface MediaPipeOptions {
@@ -24,15 +42,34 @@ export interface MediaPipeOptions {
   lowRes?: boolean;
 }
 
+/** Cheap check that a self-hosted file is really there before handing the URL to MediaPipe. */
+async function reachable(url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url, { method: "HEAD", cache: "no-store" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export class MediaPipeSource implements LandmarkSource {
   readonly kind = "mediapipe" as const;
   mode: SourceMode = "hand";
   video: HTMLVideoElement | null = null;
+  /** Also run the face model in Hand mode (face tap). */
+  faceSignals = false;
+  /** Where the wasm + models actually came from. */
+  assetSource: "local" | "cdn" | null = null;
+  /** null until the first face result; false when blendshapes lack jawOpen (face tap disabled). */
+  jawOpenAvailable: boolean | null = null;
+  /** Called once when the jawOpen check has run on a real face result. */
+  onJawOpenCheck: ((ok: boolean) => void) | null = null;
 
   private subs = new Set<FrameCb>();
   private stream: MediaStream | null = null;
   private hand: HandLandmarker | null = null;
   private face: FaceLandmarker | null = null;
+  private faceLoading: Promise<void> | null = null;
   private delegate: "GPU" | "CPU" | null = null;
   private running = false;
   private rvfcHandle: number | null = null;
@@ -42,8 +79,8 @@ export class MediaPipeSource implements LandmarkSource {
   private luma: number | null = null;
   private lastLumaAt = 0;
   private lumaCanvas: HTMLCanvasElement | null = null;
-  /** Set when the face model lacks the jawOpen blendshape (face tap disabled). */
-  jawOpenAvailable: boolean | null = null;
+  private frameNo = 0;
+  private lastBlendshapes: Record<string, number> | null = null;
 
   constructor(private opts: MediaPipeOptions = {}) {}
 
@@ -78,7 +115,8 @@ export class MediaPipeSource implements LandmarkSource {
     if (!el.videoWidth) {
       await new Promise<void>((resolve) => el.addEventListener("loadeddata", () => resolve(), { once: true }));
     }
-    await this.loadModel(this.mode);
+    if (this.mode === "hand") await this.loadHand();
+    else await this.loadFace();
     this.running = true;
     this.schedule();
   }
@@ -88,42 +126,73 @@ export class MediaPipeSource implements LandmarkSource {
     return this.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null;
   }
 
+  /** Hand ↔ Head mode. Loads the face model on first use; rejects with a readable Error. */
   async setMode(mode: SourceMode): Promise<void> {
-    if (mode === this.mode) return;
+    if (mode === "face") await this.loadFace();
+    else await this.loadHand();
     this.mode = mode;
-    if (this.running) await this.loadModel(mode);
   }
 
-  private async loadModel(mode: SourceMode) {
+  /** Face tap in Hand mode needs blendshapes from the face model too. */
+  async setFaceSignals(on: boolean): Promise<void> {
+    this.faceSignals = on;
+    if (on) await this.loadFace();
+  }
+
+  private async loadHand() {
+    if (this.hand) return;
+    await this.create("hand");
+  }
+
+  private async loadFace() {
+    if (this.face) return;
+    this.faceLoading ??= this.create("face").finally(() => {
+      this.faceLoading = null;
+    });
+    await this.faceLoading;
+  }
+
+  /** Try self-hosted assets first, then the CDN; on each, GPU first, then CPU. */
+  private async create(kind: "hand" | "face") {
     const vision = await import("@mediapipe/tasks-vision");
-    const fileset = await vision.FilesetResolver.forVisionTasks(WASM_URL);
-    const make = async (delegate: "GPU" | "CPU") => {
-      if (mode === "hand") {
-        this.hand ??= await vision.HandLandmarker.createFromOptions(fileset, {
-          baseOptions: { modelAssetPath: HAND_MODEL_URL, delegate },
-          runningMode: "VIDEO",
-          numHands: 1,
-        });
-      } else {
-        this.face ??= await vision.FaceLandmarker.createFromOptions(fileset, {
-          baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate },
-          runningMode: "VIDEO",
-          numFaces: 1,
-          outputFaceBlendshapes: true,
-        });
-      }
-      this.delegate = delegate;
-    };
-    try {
-      await make("GPU");
-    } catch (gpuErr) {
-      console.warn("[Steady] GPU delegate failed, falling back to CPU", gpuErr);
+    let lastErr: unknown = null;
+    for (const set of ASSET_SETS) {
+      if (set.name === "local" && !(await reachable(kind === "hand" ? set.hand : set.face))) continue;
+      let fileset;
       try {
-        await make("CPU");
-      } catch (cpuErr) {
-        throw new Error(`The hand-tracking model could not load. Check the internet connection. (${(cpuErr as Error)?.message ?? cpuErr})`);
+        fileset = await vision.FilesetResolver.forVisionTasks(set.wasm);
+      } catch (e) {
+        lastErr = e;
+        continue;
+      }
+      for (const delegate of ["GPU", "CPU"] as const) {
+        try {
+          if (kind === "hand") {
+            this.hand = await vision.HandLandmarker.createFromOptions(fileset, {
+              baseOptions: { modelAssetPath: set.hand, delegate },
+              runningMode: "VIDEO",
+              numHands: 1,
+            });
+          } else {
+            this.face = await vision.FaceLandmarker.createFromOptions(fileset, {
+              baseOptions: { modelAssetPath: set.face, delegate },
+              runningMode: "VIDEO",
+              numFaces: 1,
+              outputFaceBlendshapes: true,
+            });
+          }
+          this.delegate = delegate;
+          this.assetSource = set.name;
+          if (set.name === "cdn") console.info(`[Steady] ${kind} model loaded from the CDN fallback`);
+          return;
+        } catch (e) {
+          lastErr = e;
+          console.warn(`[Steady] ${kind} model: ${set.name} assets, ${delegate} delegate failed`, e);
+        }
       }
     }
+    const what = kind === "hand" ? "hand-tracking" : "face-tracking";
+    throw new Error(`The ${what} model could not load. Check the internet connection. (${(lastErr as Error)?.message ?? lastErr})`);
   }
 
   stop(): void {
@@ -169,6 +238,7 @@ export class MediaPipeSource implements LandmarkSource {
     if (now <= this.lastTs) now = this.lastTs + 0.01;
     this.lastTs = now;
     this.cameraTimes.push(now);
+    this.frameNo++;
     try {
       this.sampleLuma(v, now);
       const frame = this.detect(v, now);
@@ -180,32 +250,45 @@ export class MediaPipeSource implements LandmarkSource {
     this.schedule();
   }
 
+  private runFace(v: HTMLVideoElement, now: number) {
+    const r = this.face!.detectForVideo(v, now);
+    const cats = r.faceBlendshapes?.[0]?.categories;
+    let blendshapes: Record<string, number> | null = null;
+    if (cats) {
+      blendshapes = {};
+      for (const c of cats) blendshapes[c.categoryName] = c.score;
+      if (this.jawOpenAvailable === null) {
+        // Startup assertion (§3): the blendshape list must contain jawOpen.
+        this.jawOpenAvailable = cats.some((c) => c.categoryName === "jawOpen");
+        if (!this.jawOpenAvailable) console.warn("[Steady] face blendshapes lack jawOpen; mouth tap disabled");
+        this.onJawOpenCheck?.(this.jawOpenAvailable);
+      }
+    }
+    return { landmarks: r.faceLandmarks?.[0] ?? null, blendshapes };
+  }
+
   private detect(v: HTMLVideoElement, now: number): LandmarkFrame {
     const base = { t: now, videoWidth: v.videoWidth, videoHeight: v.videoHeight, luma: this.luma };
-    if (this.mode === "face" && this.face) {
-      const r = this.face.detectForVideo(v, now);
-      const lm = r.faceLandmarks?.[0] ?? null;
-      let blendshapes: Record<string, number> | null = null;
-      const cats = r.faceBlendshapes?.[0]?.categories;
-      if (cats) {
-        blendshapes = {};
-        for (const c of cats) blendshapes[c.categoryName] = c.score;
-        if (this.jawOpenAvailable === null) {
-          this.jawOpenAvailable = cats.some((c) => c.categoryName === "jawOpen");
-          if (!this.jawOpenAvailable) console.warn("[Steady] face blendshapes lack jawOpen; face tap disabled");
-        }
-      }
-      return { ...base, landmarks: lm ? lm.map((p) => ({ x: p.x, y: p.y, z: p.z })) : null, handedness: null, blendshapes };
+    if (this.mode === "face") {
+      if (!this.face) return { ...base, landmarks: null, handedness: null, blendshapes: null };
+      const r = this.runFace(v, now);
+      return { ...base, landmarks: r.landmarks ? r.landmarks.map((p) => ({ x: p.x, y: p.y, z: p.z })) : null, handedness: null, blendshapes: r.blendshapes };
     }
     if (!this.hand) return { ...base, landmarks: null, handedness: null, blendshapes: null };
     const r = this.hand.detectForVideo(v, now);
     const lm = r.landmarks?.[0] ?? null;
     const hd = r.handedness?.[0]?.[0]?.categoryName;
+    // Face tap in Hand mode: blendshapes from every other frame (halves the extra cost).
+    if (this.faceSignals && this.face && this.frameNo % 2 === 0) {
+      this.lastBlendshapes = this.runFace(v, now + 0.001).blendshapes;
+    } else if (!this.faceSignals) {
+      this.lastBlendshapes = null;
+    }
     return {
       ...base,
       landmarks: lm ? lm.map((p) => ({ x: p.x, y: p.y, z: p.z })) : null,
       handedness: hd === "Left" || hd === "Right" ? hd : null,
-      blendshapes: null,
+      blendshapes: this.lastBlendshapes,
     };
   }
 

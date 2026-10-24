@@ -188,11 +188,13 @@ function unionBBox(strokes: Stroke[]): Rect {
   return strokeBBox(all);
 }
 
-function padRect(r: Rect, pad: number, size: { w: number; h: number }): Rect {
-  const x = Math.max(0, Math.floor(r.x - pad));
-  const y = Math.max(0, Math.floor(r.y - pad));
-  const x2 = Math.min(size.w, Math.ceil(r.x + r.w + pad));
-  const y2 = Math.min(size.h, Math.ceil(r.y + r.h + pad));
+/** Pad a document-space rect (strokes may lie outside the original canvas after zoom / move). */
+function padRect(r: Rect, pad: number, _size: { w: number; h: number }): Rect {
+  void _size;
+  const x = Math.floor(r.x - pad);
+  const y = Math.floor(r.y - pad);
+  const x2 = Math.ceil(r.x + r.w + pad);
+  const y2 = Math.ceil(r.y + r.h + pad);
   return { x, y, w: Math.max(1, x2 - x), h: Math.max(1, y2 - y) };
 }
 

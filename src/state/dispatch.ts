@@ -14,7 +14,7 @@ import { focusCanvas } from "@/lib/focus";
 import { KEYS, remove, save, load } from "@/lib/persist";
 import { BG_HEX, persistSetup, runtime } from "./runtime";
 import { commit, lastStroke, page, redoDoc, resetDoc, undoDoc } from "./docOps";
-import { getState, INITIAL_METRICS, setState, setStatus } from "./store";
+import { getState, INITIAL_METRICS, setState, setStatus, type FaceSignal, type FaceUI } from "./store";
 import { applySpeechSetting, closeMic, say, speakNow, toggleMic } from "./voice";
 import { acceptGhost, refreshClaudeMetrics, rejectGhost, startCleanup } from "./ai";
 import { clearClaudeLog } from "@/voice/cleanupClient";
@@ -23,6 +23,8 @@ import { activateProfile, hasUnsavedChanges, loadProfiles, nextProfile, PRESETS,
 import { DEFAULT_SETTINGS } from "@/pipeline/types";
 import { desktop } from "@/desktop/bridge";
 import { desktopRoute } from "@/desktop/shortcuts";
+import { fitView, MAX_ZOOM, MIN_ZOOM, moveView, zoomAbout, ZOOM_STEP, type MoveDir, type View } from "@/lib/view";
+import { strokeBBox } from "@/pipeline/strokes";
 
 const WIDTHS = [2, 4, 6, 10, 16, 24];
 
@@ -76,6 +78,8 @@ function execute(inv: ActionInvocation, confirmed: boolean): void {
   }
   // Reminders never block: the user's next action dismisses them and still executes.
   if (st.nearest && !inv.id.startsWith("choose.")) setState({ nearest: null });
+  if (st.reminder) setState({ reminder: null });
+  if (st.demoOpen && !st.demoQuoteSeen && inv.id !== "demo.toggle") setState({ demoQuoteSeen: true });
 
   let needsConfirm = def.destructive && !confirmed;
   if (inv.id === "profile.next" && !hasUnsavedChanges()) needsConfirm = false;
@@ -242,14 +246,31 @@ function run(inv: ActionInvocation): void {
 
     // ---------------------------------------------------------------- view
     case "zoom.in":
-    case "zoom.out":
-    case "zoom.fit":
+    case "zoom.out": {
+      const c = runtime.canvasSize;
+      const v = zoomAbout(runtime.view(), id === "zoom.in" ? ZOOM_STEP : 1 / ZOOM_STEP, { x: c.w / 2, y: c.h / 2 });
+      setView(v);
+      const edge = v.zoom === MAX_ZOOM || v.zoom === MIN_ZOOM;
+      setStatus(`Zoom ${Math.round(v.zoom * 100)}%${edge ? (id === "zoom.in" ? " (closest)" : " (furthest)") : ""}. Say “fit page” to see everything.`);
+      return;
+    }
+    case "zoom.fit": {
+      const p = page();
+      const pts = [...p.strokes.flatMap((s) => s.points), ...p.texts.map((t) => ({ x: t.x, y: t.y }))];
+      const v = fitView(pts.length ? strokeBBox(pts) : null, runtime.canvasSize);
+      setView(v);
+      setStatus(v.zoom === 1 && v.pan.x === 0 && v.pan.y === 0 ? "Showing the whole page at 100%." : `Showing everything at ${Math.round(v.zoom * 100)}%.`);
+      return;
+    }
     case "move.up":
     case "move.down":
     case "move.left":
-    case "move.right":
-      setStatus(`${ACTION_BY_ID[id].label} isn't available yet. The whole page always fits on screen.`);
+    case "move.right": {
+      const dir = id.slice("move.".length) as MoveDir;
+      setView(moveView(runtime.view(), dir, runtime.canvasSize));
+      setStatus(`Moved the view ${dir}. Say “fit page” to come back.`);
       return;
+    }
     case "bg.light":
     case "bg.dark": {
       const bg = id === "bg.light" ? "light" : "dark";
@@ -413,8 +434,14 @@ function run(inv: ActionInvocation): void {
       if (st.desktopOn && !st.paused) desktop.release(); // never leave the real mouse button held
       return;
     case "mode.head":
+      if (st.phase === "calibrating") {
+        setStatus("Finish or cancel setup first.");
+        return;
+      }
+      void runtime.setHeadMode(st.settings.mode !== "head");
+      return;
     case "face.toggle":
-      setStatus(`${ACTION_BY_ID[id].label} isn't available yet. Hand mode, keys, voice and the typed box all work.`);
+      void runtime.setFaceTap(!st.face.enabled && st.face.calibrating === null);
       return;
     case "profile.next": {
       const target = inv.text ? loadProfiles().list.find((p) => p.id === inv.text) : nextProfile();
@@ -537,6 +564,10 @@ function cancelAnything(id: ActionId) {
     runtime.cancelCalibration();
     return;
   }
+  if (st.face.calibrating !== null) {
+    runtime.cancelFaceCalibration();
+    return;
+  }
   if (st.mic.open) {
     closeMic();
     return;
@@ -574,9 +605,24 @@ function makeShape(target: ShapeTarget) {
   void makeShapeAsync(target);
 }
 
+/** Zoom / move are view changes, not document edits: not on the undo stack. */
+function setView(v: View) {
+  setState((s) => ({ zoom: v.zoom, pan: v.pan, renderVersion: s.renderVersion + 1 }));
+}
+
 export function persistPrefs() {
   const s = getState();
-  save(KEYS.prefs, { colour: s.colour, width: s.width, tool: s.tool, sounds: s.sounds, speech: s.speech, inputs: s.inputs });
+  const prev = load<Record<string, unknown>>(KEYS.prefs, {});
+  save(KEYS.prefs, {
+    ...prev,
+    colour: s.colour,
+    width: s.width,
+    tool: s.tool,
+    sounds: s.sounds,
+    speech: s.speech,
+    inputs: s.inputs,
+    breakReminders: s.breakReminders,
+  });
 }
 
 export function restorePrefs() {
@@ -588,6 +634,13 @@ export function restorePrefs() {
   if (typeof p.sounds === "boolean") patch.sounds = p.sounds;
   if (typeof p.speech === "boolean") patch.speech = p.speech;
   if (p.inputs) patch.inputs = { dwell: p.inputs.dwell !== false, voice: p.inputs.voice !== false, keys: p.inputs.keys !== false };
+  const extra = p as { breakReminders?: boolean; face?: { calibration?: FaceUI["calibration"]; signal?: FaceSignal } };
+  if (typeof extra.breakReminders === "boolean") patch.breakReminders = extra.breakReminders;
+  if (extra.face) {
+    // Face tap is never on at load (it must be turned on deliberately); its check result is kept.
+    const f = getState().face;
+    patch.face = { ...f, calibration: extra.face.calibration ?? null, signal: extra.face.signal === "browInnerUp" ? "browInnerUp" : "jawOpen" };
+  }
   setState(patch);
   setEarconsEnabled(getState().sounds);
   applySpeechSetting(getState().speech);

@@ -15,9 +15,11 @@ export const TEXT_SIZE = 28;
 
 function placeAt(): Vec2 {
   const p = runtime.lastPointer;
-  if (p && runtime.isOverCanvas(p)) return { x: Math.max(8, Math.min(p.x, runtime.canvasSize.w - 200)), y: Math.max(8, Math.min(p.y, runtime.canvasSize.h - 40)) };
+  if (p && runtime.isOverCanvas(p)) {
+    return runtime.toDoc({ x: Math.max(8, Math.min(p.x, runtime.canvasSize.w - 200)), y: Math.max(8, Math.min(p.y, runtime.canvasSize.h - 40)) });
+  }
   const n = page().texts.length;
-  return { x: 32, y: 32 + ((n * TEXT_SIZE * 1.6) % Math.max(100, runtime.canvasSize.h - 80)) };
+  return runtime.toDoc({ x: 32, y: 32 + ((n * TEXT_SIZE * 1.6) % Math.max(100, runtime.canvasSize.h - 80)) });
 }
 
 export function startDictation() {

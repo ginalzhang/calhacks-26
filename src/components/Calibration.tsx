@@ -50,6 +50,7 @@ export default function Calibration() {
   const calib = useStore((s) => s.calib);
   const posture = useStore((s) => s.posture);
   const tracking = useStore((s) => s.tracking);
+  const head = useStore((s) => s.settings.mode === "head");
   const step = calib?.step;
   useEffect(() => {
     if (step === "posture") document.querySelector<HTMLButtonElement>("[data-tile='calib.start']")?.focus();
@@ -57,7 +58,7 @@ export default function Calibration() {
   if (!calib) return null;
 
   const stepNo = calib.step === "rest" ? 1 : 2;
-  const totalSteps = calib.scope === "full" ? 2 : 1;
+  const totalSteps = calib.scope === "full" && !head ? 2 : 1;
   const heading =
     calib.step === "posture"
       ? "Setup: about 10 seconds"
@@ -116,7 +117,9 @@ export default function Calibration() {
           <p className="calib-instruction" aria-live="polite">
             {calib.message}
           </p>
-          {calib.step === "circle" || calib.step === "retry-circle" ? (
+          {head ? (
+            <p className="coach">Sit comfortably. Your neutral position is where the cursor rests in the middle.</p>
+          ) : calib.step === "circle" || calib.step === "retry-circle" ? (
             <p className="coach">Move slowly. A circle that feels easy is the right size; your wrist stays resting.</p>
           ) : (
             <p className="coach">Keep your wrist resting. Small natural movement is fine; this measures it.</p>
@@ -131,8 +134,10 @@ export default function Calibration() {
           >
             <div className="calib-progress-fill" style={{ width: `${Math.round(calib.progress * 100)}%` }} />
           </div>
-          {tracking === "lost" && <p className="warn">I can&apos;t see your hand yet. There&apos;s no rush; the timer waits for you.</p>}
-          <WristDiagram />
+          {tracking === "lost" && (
+            <p className="warn">I can&apos;t see {head ? "your face" : "your hand"} yet. There&apos;s no rush; the timer waits for you.</p>
+          )}
+          {!head && <WristDiagram />}
           <div className="calib-actions">
             <TileButton tileId="calib.cancel" label="Cancel setup" keyHint="Esc" onActivate={() => runtime.cancelCalibration()} />
           </div>

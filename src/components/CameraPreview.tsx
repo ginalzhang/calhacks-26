@@ -55,13 +55,13 @@ export default function CameraPreview() {
         </p>
         {!collapsed && (
           <p className="preview-fps">
-            Camera {camFps} fps · detection {detFps} fps
+            Camera {camFps} fps, detection {detFps} fps
           </p>
         )}
         {lowFps && <p className="warn">Detection is {detFps} fps (below 25). Close other tabs, or add light.</p>}
         {dark && <p className="warn">Lighting is low. A lamp facing you helps tracking.</p>}
         <button type="button" className="link-button" onClick={() => setState({ previewCollapsed: !collapsed })}>
-          {collapsed ? "Show larger preview" : "Make preview small"}
+          {collapsed ? "Larger preview" : "Smaller preview"}
         </button>
       </div>
     </section>

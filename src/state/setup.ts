@@ -6,6 +6,7 @@ import { getParams } from "@/lib/params";
 import { focusCanvas } from "@/lib/focus";
 import { probeKeys } from "@/voice/keyStatus";
 import { runtime } from "./runtime";
+type Runtime = typeof runtime;
 import { getState, setState, setStatus, type Posture } from "./store";
 import { restoreDoc } from "./docOps";
 import { dispatch, restorePrefs } from "./dispatch";
@@ -19,6 +20,7 @@ interface SavedSetup {
   settings?: Partial<PipelineSettings>;
   posture?: Posture;
   deviceId?: string | null;
+  modes?: Runtime["modes"];
   savedAt?: number;
 }
 
@@ -42,6 +44,7 @@ export function boot() {
     setState({ phase: "intro" });
     setStatus("Welcome to Steady.");
   }
+  runtime.onFaceTap = () => dispatch({ id: "pen.toggle", via: "face" });
   void runtime.start();
   void probeKeys()
     .then((k) => {
@@ -97,6 +100,12 @@ export function applyLastSetup() {
   const s = savedSetup();
   if (!s) return skipSetup();
   const settings = { ...DEFAULT_SETTINGS, ...(s.settings ?? {}), simulateTremor: false };
+  if (s.modes) runtime.modes = s.modes;
+  // Head mode needs the face model: resume in Hand mode, the Head mode tile switches over.
+  if (settings.mode === "head") {
+    const hand = s.modes?.hand;
+    Object.assign(settings, { mode: "hand", gain: hand?.gain ?? 3, activeBox: hand?.activeBox ?? null });
+  }
   runtime.updateSettings(settings);
   setState({ calibration: s.calibration ?? null, posture: s.posture ?? getState().posture, phase: "ready", calib: null, previewCollapsed: true });
   setStatus(`Using your last setup (Steadiness ${settings.steadiness}, gain ${settings.gain.toFixed(1)}×). Hold still to start drawing.`);
