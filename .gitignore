@@ -9,3 +9,4 @@ playwright-report/
 resources/assets/
 resources/bin/
 .DS_Store
+.archive/

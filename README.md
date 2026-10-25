@@ -1,13 +1,25 @@
 # Steady
 
-Phase 03 Krita integration implementation for Apple Silicon/macOS 26+. Phase completion is governed by [the plan](plan/PLAN.md) and [execution ledger](plan/LEDGER.md). Five-position calibration and visual/fake-input mapping are available. Canvas marking, explicit drawing, safe recovery, semantic panel actions and configurable global keys are implemented. Physical Phase 03 acceptance is pending operator verification.
+Steady is a working prototype of a local macOS drawing companion for Krita on Apple Silicon/macOS 26+. It maps camera-based head or palm tracking to a calibrated canvas and provides drawing controls through a floating panel and configurable global keys. It includes five-position calibration, canvas marking, explicit real-input opt-in, and pause/recovery controls.
 
-Use Node 26.12.1, npm 11.20.0, Swift 6.4 and macOS SDK 27.0. All direct npm dependencies are pinned in `package.json`; use the committed/resolved `package-lock.json` without updating versions.
+Physical-camera and Krita acceptance remain partially unverified. Voice input and speech-asset installation are disabled. Generic shortcut profiles are configuration previews; native execution supports the fixed Krita profile.
+
+## Development
+
+Use Node 26.12.1, npm 11.20.0, Swift 6.4, and macOS SDK 27.0. Install the pinned dependencies with the committed `package-lock.json`.
 
 ```sh
 npm ci
 npm run setup:electron
 npm run assets
+npm run dev
+```
+
+Development starts Forge/Vite and the bundled native helper. If the environment sets `ELECTRON_RUN_AS_NODE=1`, unset it before launching Electron; Playwright does this explicitly. Packaged resources load locally from files and `steady-resource:`. Model/runtime URLs and hashes are recorded in [the asset manifest](resources/asset-manifest.json). Restore assets with `npm run assets`; runtime downloads and CDN fallback are blocked.
+
+## Checks and packaging
+
+```sh
 npm run typecheck
 npm test
 npm run test:native
@@ -16,16 +28,29 @@ npm run test:e2e
 npm run make
 ```
 
-`npm run dev` starts Forge/Vite and the bundled native helper. Development uses only the local Vite origin; packaged resources load from local files and `steady-resource:`. In environments setting `ELECTRON_RUN_AS_NODE=1`, unset it before launching Electron. Playwright does this explicitly.
+Package before running the packaged-app end-to-end tests. Automated tests use fake input; they do not establish physical-camera, real desktop input, fullscreen, permissions, external-display, or offline inference acceptance.
 
-The app is `out/Steady-darwin-arm64/Steady.app`; ZIP output is `out/make/zip/darwin/arm64/Steady-darwin-arm64-0.1.0.zip`. The Swift executable and verified model/runtime files are outside ASAR under `Contents/Resources/`. All asset URLs/hashes are in [the manifest](resources/asset-manifest.json). Restore assets using `npm run assets`; runtime downloads and CDN fallback are blocked.
+The packaged app is `out/Steady-darwin-arm64/Steady.app`. ZIP output is `out/make/zip/darwin/arm64/Steady-darwin-arm64-0.1.0.zip`. The Swift executable and verified model/runtime files are outside ASAR under `Contents/Resources/`. See [the native helper documentation](native/README.md) for protocol and runtime details.
 
-The panel starts paused with microphone off, camera off and fake native input. Open Settings to select a camera/mode, start capture, and complete neutral/left/right/up/down captures. Each Capture samples for two seconds and requires at least40 valid samples and80% validity. The panel shows a mirrored preview. Calibration is saved separately per camera/mode in atomic versioned settings; no active input state is persisted. Recenter captures neutral, preserves extents and leaves input paused. After declared Palm loss, show only the selected model label and explicitly confirm it. Continuity uses a conservative label/proximity heuristic. Voice input and speech-asset setup are disabled and deferred to separately authorized Phase 04. The panel owns capture when unfocused/collapsed; settings pause input. No frames, recordings or transcripts are persisted. Phase-01 action timing evidence contains session/utterance IDs and action IDs only.
+## Using the prototype
 
-The supervised real-input probe is available only in the packaged app. It requires the disposable-document confirmation checkbox and launches the bundled helper with explicit `--probe --real-input`. Switch to Krita during the five-second countdown, keeping the physical cursor over a disposable canvas with room for a ten-point rightward stroke. The probe is bounded; emergency release is available in Settings. Automated tests use fake input and never invoke this control.
+The panel starts paused, with camera and microphone off and fake native input enabled.
 
-Follow the [Phase 03 operator checklist](plan/ledger/phase-03-20261024-01/artifacts/operator-checklist.md) for manual Krita acceptance. The10s warmup+60s baseline measures renderer mapping rate and receipt-to-map processing time. Camera inference p95 is bitmap-dispatch-to-result receipt; neither number represents native-event or perceived smoothing latency. Full scored native timing belongs Phase05. A successful build or synthetic model test does not establish physical-camera, fullscreen, permissions, external-display or offline inference acceptance.
+1. Open Settings, select a camera and tracking mode, and start capture. The preview is mirrored.
+2. Complete neutral/left/right/up/down calibration. Each capture samples for two seconds and requires at least 40 valid samples and 80% validity. Calibration is saved separately per camera and mode. Recenter preserves extents and leaves input paused.
+3. Open a disposable Krita document, select the display, and explicitly enable real input in Settings.
+4. Close Settings, keep Krita in the foreground, and choose **Set canvas** on the floating panel. Use F8 to mark the top-left and bottom-right corners. Canvas setup ends paused.
+5. Resume explicitly after tracking is valid for 500 ms. F8 otherwise toggles the pen; F9 pauses. Additional global keys can be configured in Settings.
 
-The [2026-10-24 scope amendment](plan/ledger/phase-02-20261024-01/artifacts/desk-palm-deferral-01.md) permits raised-hand Palm validation in Phase 02. Relaxed desk-facing Palm behavior remains unverified and its mandatory physical validation is deferred to Phase 05. Remaining Phase 02 hardware/review evidence is preserved as unverified; the user accepted Phase 02 as sufficient Phase 03 entry.
+Reconfirm the canvas each launch and after geometry, camera, or mode changes. Opening Settings, target changes, and tracking loss release input. Recovery never resumes automatically. The panel continues to own capture when unfocused or collapsed. After declared palm loss, show only the selected model label and explicitly confirm the hand; continuity uses a conservative label/proximity heuristic.
 
-For Phase 03, open a disposable Krita document and enable real input explicitly in Settings. Select/calibrate the camera and display, close Settings, keep Krita foreground, then use the nonactivating panel **Set canvas** control. F8 marks top-left then bottom-right during setup and otherwise toggles the pen; F9 pauses. Canvas capture ends paused and Resume requires 500ms of valid tracking. Reconfirm canvas each launch and after geometry/camera/mode changes. Opening Settings, target changes and loss always release input; recovery never resumes automatically. Configure additional global keys in Settings. Generic shortcut profiles are saved previews and remain unverified/unavailable for native execution under the fixed Krita-only protocol. Voice stays off; Phase 04 is not authorized.
+Settings also offers a bounded real-input probe in the packaged app. Confirm a disposable Krita document, switch to Krita during the five-second countdown, and keep the physical cursor over the canvas with room for a ten-point rightward stroke. Emergency release is available in Settings.
+
+## Known limitations
+
+- Relaxed desk-facing palm tracking remains unverified; earlier validation used a raised hand.
+- The 10-second warmup and 60-second baseline measure renderer mapping rate and receipt-to-map processing time. Camera inference p95 measures bitmap dispatch to result receipt. These do not establish native-event or perceived smoothing latency.
+- Speech implementation and diagnostics remain in the source, but microphone enable and speech-asset installation are rejected. Live recognition and speech timing are unverified.
+- No camera frames, recordings, or transcripts are persisted. Retained speech timing diagnostics contain identifiers and counters only.
+
+Historical plans, reviews, operator checklists, and execution evidence are preserved locally in `.archive/plan/`. `.archive/` is ignored by Git and is not included in fresh checkouts. These records describe earlier development milestones; this README describes the current working prototype.
