@@ -1,0 +1,39 @@
+{
+  "name": "steady",
+  "productName": "Steady",
+  "version": "0.1.0",
+  "description": "Local macOS drawing companion — phase 03 Krita integration",
+  "private": true,
+  "type": "module",
+  "main": ".vite/build/main.cjs",
+  "engines": { "node": "26.12.1", "npm": "11.20.0" },
+  "scripts": {
+    "dev": "npm run build:native && electron-forge start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:native": "npm run build:native && CLANG_MODULE_CACHE_PATH=/private/tmp/steady-native-module-cache SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/steady-native-module-cache swift test --package-path native --arch arm64 --scratch-path .cache/swift-test-xcode --cache-path .cache/swiftpm --disable-sandbox -Xswiftc -load-plugin-library -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib && python3 native/Tests/integration.py resources/bin/SteadyNative",
+    "setup:electron": "install-electron",
+    "test:e2e": "playwright test",
+    "build:native": "node scripts/build-native.mjs",
+    "assets": "node scripts/assets.mjs --fetch",
+    "verify:assets": "node scripts/assets.mjs",
+    "package": "npm run build:native && npm run verify:assets && electron-forge package --arch=arm64 --platform=darwin",
+    "make": "npm run build:native && npm run verify:assets && electron-forge make --arch=arm64 --platform=darwin"
+  },
+  "dependencies": { "@mediapipe/tasks-vision": "1.1.1", "react": "19.3.1", "react-dom": "19.3.1" },
+  "devDependencies": {
+    "@electron-forge/cli": "8.0.1",
+    "@electron-forge/maker-zip": "8.0.1",
+    "@electron-forge/plugin-vite": "8.0.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "45.0.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.1"
+  },
+  "config": { "forge": "./forge.config.mjs" }
+}

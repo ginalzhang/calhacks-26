@@ -1,0 +1,81 @@
+import { contextBridge, ipcRenderer } from 'electron';
+import { estimateClock, type ClockRoundTrip } from './clock';
+import type { ActionID, LocalActionID, GlobalBindings, ShortcutProfile, CalibrationV1, Point, TrackingProbeMetrics, Mode, ProbeStatus, Rect, SteadyAPI, TrackingSample } from '../shared/contracts';
+
+let clockOffset = 0;
+let clockReady = false;
+let synchronizing = false;
+let clockFault: string | null = 'Synchronizing capture clock';
+const clockListeners = new Set<(status: ProbeStatus) => void>();
+const statusWithClock = (status: ProbeStatus): ProbeStatus => ({ ...status, fault: status.fault ?? clockFault });
+async function synchronizeClock(): Promise<void> {
+  if (synchronizing) return;
+  synchronizing = true;
+  clockReady = false;
+  try {
+    const samples: ClockRoundTrip[] = [];
+    for (let index = 0; index < 8; index++) {
+      const sent = performance.now();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const remote = await Promise.race([
+          ipcRenderer.invoke('steady:clock') as Promise<number>,
+          new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Clock synchronization timeout')), 500); }),
+        ]);
+        samples.push({ sent, received: performance.now(), remote });
+      } finally { clearTimeout(timer); }
+    }
+    const estimate = estimateClock(samples);
+    if (estimate.uncertainty > 10) throw new Error('Capture clock uncertainty exceeds 10 ms');
+    clockOffset = estimate.offset;
+    clockReady = true;
+    clockFault = null;
+  } catch (error) {
+    clockFault = String(error);
+    ipcRenderer.send('steady:clock-fault', clockFault);
+    void ipcRenderer.invoke('steady:action', 'pause').catch(() => undefined);
+  } finally {
+    synchronizing = false;
+    void ipcRenderer.invoke('steady:status').then((status: ProbeStatus) => { for (const callback of clockListeners) callback(statusWithClock(status)); }).catch(() => undefined);
+  }
+}
+void synchronizeClock();
+setInterval(() => { void synchronizeClock(); }, 30_000);
+ipcRenderer.on('steady:resync-clocks', () => { void synchronizeClock(); });
+
+const api: SteadyAPI = Object.freeze({
+  status: (): Promise<ProbeStatus> => ipcRenderer.invoke('steady:status').then(statusWithClock),
+  onStatus: (callback: (status: ProbeStatus) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, value: ProbeStatus): void => callback(statusWithClock(value));
+    ipcRenderer.on('steady:status-changed', handler);
+    clockListeners.add(callback);
+    return () => { ipcRenderer.removeListener('steady:status-changed', handler); clockListeners.delete(callback); };
+  },
+  action: (actionId: ActionID): Promise<void> => ipcRenderer.invoke('steady:action', actionId),
+  localAction: (actionId: LocalActionID): Promise<void> => ipcRenderer.invoke('steady:local-action', actionId),
+  beginCanvas: (): Promise<void> => ipcRenderer.invoke('steady:begin-canvas'),
+  cancelCanvas: (): Promise<void> => ipcRenderer.invoke('steady:cancel-canvas'),
+  setRealInput: (enabled: boolean): Promise<void> => ipcRenderer.invoke('steady:real-input', enabled),
+  recover: (): Promise<void> => ipcRenderer.invoke('steady:recover'),
+  saveBindings: (bindings: GlobalBindings): Promise<void> => ipcRenderer.invoke('steady:save-bindings', bindings),
+  saveProfile: (profile: ShortcutProfile): Promise<void> => ipcRenderer.invoke('steady:save-profile', profile),
+  onLocalAction: (callback: (actionId: LocalActionID) => void): (() => void) => { const handler = (_event: Electron.IpcRendererEvent, actionId: LocalActionID): void => callback(actionId); ipcRenderer.on('steady:local-action', handler); return () => { ipcRenderer.removeListener('steady:local-action', handler); }; },
+  onConfirmHand: (callback: () => void): (() => void) => { const handler = (): void => callback(); ipcRenderer.on('steady:confirm-hand', handler); return () => { ipcRenderer.removeListener('steady:confirm-hand', handler); }; },
+  collapse: (collapsed: boolean): Promise<void> => ipcRenderer.invoke('steady:collapse', collapsed),
+  openSettings: (): Promise<void> => ipcRenderer.invoke('steady:open-settings'),
+  closeSettings: (): Promise<void> => ipcRenderer.invoke('steady:close-settings'),
+  selectCamera: (cameraId: string, mode: Mode): Promise<void> => ipcRenderer.invoke('steady:select-camera', cameraId, mode),
+  selectDisplay: (displayId:number):Promise<void>=>ipcRenderer.invoke('steady:select-display',displayId),
+  submitSample: (sample: TrackingSample): void => { if (clockReady) ipcRenderer.send('steady:sample', { ...sample, captureTimestamp: sample.captureTimestamp + clockOffset }); },
+  recordTrackingMetrics: (metrics: TrackingProbeMetrics): Promise<void> => ipcRenderer.invoke('steady:tracking-metrics', metrics),
+  onRecenter: (callback: () => void): (() => void) => { const handler = (): void => callback(); ipcRenderer.on('steady:recenter', handler); return () => { ipcRenderer.removeListener('steady:recenter', handler); }; },
+  saveCalibration: (calibration: CalibrationV1): Promise<void> => ipcRenderer.invoke('steady:save-calibration', calibration),
+  submitMappedProbe: (sample: TrackingSample, position: Point | null): void => { if (clockReady) ipcRenderer.send('steady:mapped-probe', { ...sample, captureTimestamp: sample.captureTimestamp + clockOffset }, position); },
+  microphone: (enabled: boolean): Promise<void> => ipcRenderer.invoke('steady:microphone', enabled),
+  installSpeechAssets: (): Promise<void> => ipcRenderer.invoke('steady:install-speech-assets'),
+  runNativeProbe: (): Promise<void> => ipcRenderer.invoke('steady:run-native-probe'),
+  releaseInput: (): Promise<void> => ipcRenderer.invoke('steady:release-input'),
+  registerButtons: (buttons: { actionId: LocalActionID; rect: Rect }[]): void => ipcRenderer.send('steady:register-buttons', buttons),
+  quit: (): Promise<void> => ipcRenderer.invoke('steady:quit'),
+});
+contextBridge.exposeInMainWorld('steady', api);

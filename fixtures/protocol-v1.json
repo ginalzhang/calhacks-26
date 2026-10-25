@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "units": "Quartz logical points; monotonic milliseconds converted to native clock",
+  "session": "00000000-0000-4000-8000-000000000001",
+  "positive": [
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":1,"type":"hello","payload":{"bundleId":"org.steady.local"}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":2,"type":"configure","payload":{"generation":1,"targetBundleId":"org.krita","targetPid":123,"displayId":1,"canvas":{"x":-1000,"y":10,"width":500,"height":500},"excludedRects":[{"x":-400,"y":16,"width":320,"height":560}]}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":3,"type":"sample","payload":{"generation":1,"frameId":1,"captureTimestamp":1000,"valid":true,"position":{"x":-800,"y":200}}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":4,"type":"action","payload":{"generation":1,"eventId":"event-1","actionId":"pause"}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":5,"type":"ping","payload":{"senderTimestamp":1000}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":6,"type":"microphone","payload":{"enabled":false,"speechSession":"00000000-0000-4000-8000-000000000002"}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":7,"type":"installSpeechAssets","payload":{"locale":"en-US"}},
+    {"v":1,"session":"00000000-0000-4000-8000-000000000001","seq":8,"type":"shutdown","payload":{}}
+  ],
+  "negative": [
+    {"name":"unknown version","line":"{\"v\":2,\"session\":\"00000000-0000-4000-8000-000000000001\",\"seq\":1,\"type\":\"hello\",\"payload\":{\"bundleId\":\"org.steady.local\"}}"},
+    {"name":"malformed","line":"{"},
+    {"name":"unknown type","line":"{\"v\":1,\"session\":\"00000000-0000-4000-8000-000000000001\",\"seq\":1,\"type\":\"shell\",\"payload\":{}}"},
+    {"name":"negative sequence","line":"{\"v\":1,\"session\":\"00000000-0000-4000-8000-000000000001\",\"seq\":-1,\"type\":\"ping\",\"payload\":{\"senderTimestamp\":1}}"},
+    {"name":"nonfinite","line":"{\"v\":1,\"session\":\"00000000-0000-4000-8000-000000000001\",\"seq\":1,\"type\":\"ping\",\"payload\":{\"senderTimestamp\":1e999}}"},
+    {"name":"unknown action","line":"{\"v\":1,\"session\":\"00000000-0000-4000-8000-000000000001\",\"seq\":1,\"type\":\"action\",\"payload\":{\"generation\":1,\"eventId\":\"e\",\"actionId\":\"erase\"}}"}
+  ],
+  "scenarios": ["fragmented UTF-8 lines", "coalesced lines", "16384-byte maximum excluding newline", "duplicate and decreasing seq", "replaced session", "expired generation", "ack within 500 ms", "8 round trips choose smallest RTT", "clock uncertainty greater than 10 ms pauses", "stale capture despite live pings releases at 250 ms", "parent EOF releases", "--release-and-exit releases"]
+}

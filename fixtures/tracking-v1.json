@@ -1,0 +1,485 @@
+{
+  "version": 1,
+  "evidence": "synthetic contract validation only",
+  "calibration": {
+    "positive": [
+      {
+        "schemaVersion": 1,
+        "cameraId": "synthetic-camera-a",
+        "mode": "head",
+        "selectedHand": null,
+        "neutral": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "extents": {
+          "left": 0.2,
+          "right": 0.3,
+          "up": 0.15,
+          "down": 0.25
+        },
+        "jitter": {
+          "x": 0.001,
+          "y": 0.002
+        },
+        "gain": 1,
+        "smoothing": 50
+      },
+      {
+        "schemaVersion": 1,
+        "cameraId": "synthetic-camera-a",
+        "mode": "palm",
+        "selectedHand": "Left",
+        "neutral": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "extents": {
+          "left": 0.2,
+          "right": 0.3,
+          "up": 0.15,
+          "down": 0.25
+        },
+        "jitter": {
+          "x": 0.001,
+          "y": 0.002
+        },
+        "gain": 1,
+        "smoothing": 50
+      },
+      {
+        "schemaVersion": 1,
+        "cameraId": "synthetic-camera-b",
+        "mode": "palm",
+        "selectedHand": "Right",
+        "neutral": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "extents": {
+          "left": 0.2,
+          "right": 0.3,
+          "up": 0.15,
+          "down": 0.25
+        },
+        "jitter": {
+          "x": 0.001,
+          "y": 0.002
+        },
+        "gain": 3,
+        "smoothing": 0
+      }
+    ],
+    "negative": [
+      {
+        "name": "minimum extent",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.01,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "three jitter boundary",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.006
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "gain high",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 3.01,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "gain low",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 0.49,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "smoothing high",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 101
+        }
+      },
+      {
+        "name": "head label",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": "Left",
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "missing palm label",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "palm",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "empty camera",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "negative jitter",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": -0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "nonfinite",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": "nonfinite",
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "missing selectedHand",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50
+        }
+      },
+      {
+        "name": "persisted active state",
+        "value": {
+          "schemaVersion": 1,
+          "cameraId": "synthetic-camera-a",
+          "mode": "head",
+          "selectedHand": null,
+          "neutral": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "extents": {
+            "left": 0.2,
+            "right": 0.3,
+            "up": 0.15,
+            "down": 0.25
+          },
+          "jitter": {
+            "x": 0.001,
+            "y": 0.002
+          },
+          "gain": 1,
+          "smoothing": 50,
+          "penDown": true
+        }
+      }
+    ]
+  },
+  "sample": {
+    "positive": [
+      {
+        "generation": 1,
+        "frameId": 1,
+        "captureTimestamp": 1000,
+        "mode": "palm",
+        "valid": true,
+        "anchor": {
+          "x": 0.4,
+          "y": 0.6
+        },
+        "qualityReason": "valid",
+        "selectedHand": "Left"
+      },
+      {
+        "generation": 1,
+        "frameId": 1,
+        "captureTimestamp": 1000,
+        "mode": "palm",
+        "valid": false,
+        "anchor": null,
+        "qualityReason": "multiple subjects",
+        "selectedHand": "Left"
+      }
+    ],
+    "negative": [
+      {
+        "name": "invalid has anchor",
+        "value": {
+          "generation": 1,
+          "frameId": 1,
+          "captureTimestamp": 1000,
+          "mode": "palm",
+          "valid": false,
+          "anchor": {
+            "x": 0.4,
+            "y": 0.6
+          },
+          "qualityReason": "valid",
+          "selectedHand": "Left"
+        }
+      },
+      {
+        "name": "negative frame",
+        "value": {
+          "generation": 1,
+          "frameId": -1,
+          "captureTimestamp": 1000,
+          "mode": "palm",
+          "valid": true,
+          "anchor": {
+            "x": 0.4,
+            "y": 0.6
+          },
+          "qualityReason": "valid",
+          "selectedHand": "Left"
+        }
+      },
+      {
+        "name": "invalid mode",
+        "value": {
+          "generation": 1,
+          "frameId": 1,
+          "captureTimestamp": 1000,
+          "mode": "foot",
+          "valid": true,
+          "anchor": {
+            "x": 0.4,
+            "y": 0.6
+          },
+          "qualityReason": "valid",
+          "selectedHand": "Left"
+        }
+      },
+      {
+        "name": "invalid anchor",
+        "value": {
+          "generation": 1,
+          "frameId": 1,
+          "captureTimestamp": 1000,
+          "mode": "palm",
+          "valid": true,
+          "anchor": {
+            "x": 1.1,
+            "y": 0.5
+          },
+          "qualityReason": "valid",
+          "selectedHand": "Left"
+        }
+      },
+      {
+        "name": "unknown handedness",
+        "value": {
+          "generation": 1,
+          "frameId": 1,
+          "captureTimestamp": 1000,
+          "mode": "palm",
+          "valid": true,
+          "anchor": {
+            "x": 0.4,
+            "y": 0.6
+          },
+          "qualityReason": "valid",
+          "selectedHand": "Unknown"
+        }
+      }
+    ]
+  }
+}

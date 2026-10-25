@@ -1,0 +1,11 @@
+node_modules/
+.vite/
+out/
+native/.build*/
+native/.swiftpm/
+.cache/
+test-results/
+playwright-report/
+resources/assets/
+resources/bin/
+.DS_Store
